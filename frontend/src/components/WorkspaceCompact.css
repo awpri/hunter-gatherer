@@ -1,0 +1,47 @@
+/* The graph starts after one navigation surface and one compact search row. */
+.compact-shell .workspace-top {position:relative;min-height:54px;padding:9px 16px;gap:8px;flex-wrap:nowrap}
+.compact-shell .graph-title-hidden {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.compact-shell .activity-status:not(.is-active) {display:none}
+.compact-shell .workspace-connections .activity-status.is-active {position:absolute;right:16px;top:100%;z-index:5;max-width:180px;pointer-events:none}
+.compact-shell .workspace-top .search-box {order:0;flex:1 1 0;flex-basis:auto;width:auto;min-width:120px;max-width:none;height:34px;margin:0;padding:0 8px 0 0;gap:7px}
+.compact-shell .search-box input {width:0;flex:1;min-width:0;font-size:12px}
+.compact-shell .search-box>svg {flex-shrink:0}
+.compact-shell .workspace-top .top-actions {margin:0;gap:6px;flex-shrink:0}
+.compact-shell .top-actions .button {height:34px;padding:6px 9px;font-size:11px}
+.compact-shell .privacy-control {min-height:32px;min-width:28px;padding:5px;justify-content:center}
+.compact-shell .privacy-control span {display:none}
+.compact-shell .nav-status-dot {display:inline-block;width:6px;height:6px;border-radius:50%;flex:0 0 6px;background:var(--muted);margin-left:auto;box-shadow:0 0 0 2px color-mix(in srgb,var(--panel) 85%,transparent)}
+.compact-shell .tone-green {background:var(--success)}
+.compact-shell .tone-amber {background:var(--warning)}
+.compact-shell .tone-red {background:var(--danger)}
+.compact-shell .tone-gray {background:var(--muted)}
+.compact-shell .library-icon {aspect-ratio:1;flex-shrink:0;object-fit:contain}
+.compact-shell .library-brand .sidebar-tools .library-icon {width:16px;height:16px}
+.compact-shell .health-controls {gap:8px}
+@media(max-width:1000px) {
+  .compact-shell .library-brand {min-height:48px;padding:9px 16px}
+  .compact-shell .workspace-navigation {padding:0 10px 7px;gap:3px}
+  .compact-shell .navigation-item,.compact-shell .navigation-item.utility-navigation {min-height:32px;padding:6px 10px;gap:6px}
+  .compact-shell .navigation-item.utility-navigation:nth-child(4) {margin-left:auto}
+  .compact-shell .workspace-top .top-actions .button span {display:inline}
+  .compact-shell .view-title:not(.graph-title-hidden) {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+}
+@media(max-width:640px) {
+  .compact-shell .workspace-top {padding:8px 12px;min-height:50px;gap:7px}
+  .compact-shell .workspace-top .search-box {min-width:100px;height:33px}
+  .compact-shell .top-actions .button {height:33px;padding:6px 8px}
+  .compact-shell .workspace-connections .activity-status.is-active {right:12px}
+}
+@media(max-width:450px) {
+  .compact-shell .library-brand {min-height:46px;padding:8px 12px}
+  .compact-shell .workspace-navigation {gap:2px;padding:0 6px 6px}
+  .compact-shell .navigation-item,.compact-shell .navigation-item.utility-navigation {padding:6px 7px;gap:4px;font-size:10px}
+  .compact-shell .navigation-item.utility-navigation svg {display:none}
+  .compact-shell .navigation-item .nav-status-dot {width:5px;height:5px;flex-basis:5px;margin-left:1px}
+  .compact-shell .workspace-top {padding:7px 10px;gap:5px;min-height:48px}
+  .compact-shell .workspace-top .top-actions {gap:4px}
+  .compact-shell .workspace-top .top-actions .button {width:30px;padding:6px}
+  .compact-shell .workspace-top .top-actions .button span {display:none}
+  .compact-shell .workspace-top .search-box {gap:5px;padding-right:6px}
+  .compact-shell .health-view {padding:16px}
+}

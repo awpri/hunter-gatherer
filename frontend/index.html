@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-accent="mint" data-density="comfortable" data-motion="system" data-surface="graphite" data-backdrop="dots">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101315" />
+    <script>
+      (() => {
+        const d = document.documentElement;
+        let p = {};
+        try { p = JSON.parse(localStorage.getItem('proharness.appearance.v1') || '{}') || {}; } catch {}
+        const valid = (key, choices, fallback) => choices.includes(p[key]) ? p[key] : fallback;
+        const theme = valid('theme', ['dark','light','system'], 'dark');
+        d.dataset.theme = theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
+        d.dataset.surface = valid('surface', ['graphite','midnight'], 'graphite');
+        d.dataset.backdrop = valid('backdrop', ['dots','grid','none'], 'dots');
+        d.dataset.accent = valid('accent', ['mint','blue','amber','rose'], 'mint');
+        d.dataset.density = valid('density', ['comfortable','compact'], 'comfortable');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', d.dataset.theme === 'dark' ? (d.dataset.surface === 'midnight' ? '#0b101b' : '#101315') : '#f3f6f5');
+        d.dataset.motion = p.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'system';
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/hunter-gatherer.svg" />
+    <link rel="preload" href="/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
+    <title>hunter/gatherer</title>
+    <meta name="description" content="Ask your personal library. Find exact quotations, inspect original sources, and share cited context with your AI assistant." />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

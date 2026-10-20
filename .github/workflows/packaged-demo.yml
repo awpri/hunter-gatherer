@@ -1,0 +1,46 @@
+name: Packaged fictional demo
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  packaged-demo:
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11', '3.12', '3.13', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Export reviewed source and build sdist then wheel
+        run: |
+          python -m pip install build
+          python scripts/export_public_candidate.py --destination "${{ runner.temp }}/public-candidate"
+          python -m build "${{ runner.temp }}/public-candidate" --outdir dist
+      - name: Install wheel into fresh environment and exercise outside checkout
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/proharness-install"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            smoke_python="$RUNNER_TEMP/proharness-install/Scripts/python.exe"
+          else
+            smoke_python="$RUNNER_TEMP/proharness-install/bin/python"
+          fi
+          wheels=(dist/*.whl)
+          "$smoke_python" -m pip install "${wheels[0]}[dev,document-view]"
+          cp scripts/smoke_packaged_demo.py "$RUNNER_TEMP/smoke_packaged_demo.py"
+          cd "$RUNNER_TEMP"
+          export PAGE_IMAGE_TEST_PYTHON="$smoke_python"
+          "$smoke_python" -m pytest -q -p no:cacheprovider "$RUNNER_TEMP/public-candidate/tests"
+          "$smoke_python" -I -B smoke_packaged_demo.py --output packaged-demo.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: packaged-demo-${{ matrix.os }}-${{ matrix.python }}
+          path: ${{ runner.temp }}/packaged-demo.json
+          if-no-files-found: ignore

@@ -1,0 +1,134 @@
+import {isVisualRegion,type VisualRegion} from './visualRegions';
+import {isOriginalFileReference,originalFileReference,originalFileCitation,type OriginalFileReference} from './originalFiles';
+import {isOriginalPageReference,originalPageReference,type OriginalPageReference} from './pageImages';
+import type {EvidenceRef,RetrievalPaths,RetrievalPath,RetrievalPathStep} from './libraryApi';
+export interface SourcePassage extends EvidenceRef {title?:string;quote:string;chunk_id:string;citation:string;ordinal?:number;anchor?:boolean;version?:number;is_latest?:boolean}
+export interface EvidenceMemory {memory_id:string;citation:string;text:string;kind:string;verification:string;provenance?:{sources:SourcePassage[]}}
+export interface Assessment {status?:string;candidate_citations?:string[];missing_query_terms?:string[];[key:string]:unknown}
+export interface SourceFamily {family_id:string;document_ids:string[];citations:string[];duplicate_excerpt_count:number;independent_corroboration:string}
+export interface FileLead {source_reference?:OriginalFileReference;original_citation?:string;document_id:string;version:number;content_hash:string;title:string|null;source_filename:string|null;media_type:string|null;author?:string|null;document_date?:string|null;has_stored_chunks:boolean;matched_queries:number[];matched_fields:string[];source_metadata_warnings?:string[]}
+export interface FileDiscovery {executed:boolean;reason?:string;candidates:FileLead[];queries?:string[];matching_documents?:number;omitted_documents?:number;documents_with_omitted_metadata?:number}
+export interface OmittedReference {citation?:string;stream:string;rank:number;omission_reason?:string;navigation_labels?:{title?:string;text_prefix?:string;section?:string;page?:number|string};source_references?:{citation?:string}[]}
+export interface DiscoveryLead {citation?:string;record_id?:string;memory_id?:string;derived_text?:string;navigation_labels?:{title?:string;text_prefix?:string};source_references?:{citation?:string}[]}
+export interface EvidencePacket {visual_region_discovery?:{scope:string;candidate_limit_reached?:boolean;remaining?:number};visual_regions?:VisualRegion[];executed_requirements?:string[];loaded_pages?:number;memory_discovery?:{candidates:DiscoveryLead[];omitted_candidates?:number};enrichment_discovery?:{candidates:DiscoveryLead[]};source_leads?:DiscoveryLead[];warnings?:string[];continuation?:{next_cursor:string|null;scope?:string};omitted_references?:OmittedReference[];projection?:{omitted_counts?:Record<string,number>;omitted_reference_count?:number;[key:string]:unknown};retrieval_paths?:RetrievalPaths;source_discovery?:FileDiscovery;source_families?:SourceFamily[];query:string;relevant_memories:EvidenceMemory[];supporting_passages:SourcePassage[];missing_information:{question:string;field:string;page?:number}[];requirement_checks:{query:string;assessment_page?:number;selected_citations?:string[];retrieval_assessment:Assessment;warnings:string[];next_step:string}[];retrieval_assessment:Assessment;usage_guidance:string[];retrieval?:{warnings:string[]}}
+export type CollectionReference = {memory_id:string;document_id?:never;chunk_id?:never}|{document_id:string;chunk_id?:string;memory_id?:never;version?:never;original_content_hash?:never;page?:never}|(OriginalPageReference&{memory_id?:never;chunk_id?:never})|(OriginalFileReference&{memory_id?:never;chunk_id?:never;page?:never});
+export interface CollectionReview {citation:string;status:'unreviewed'|'reviewed'|'needs_context';note:string}
+export interface Collection {schemaVersion?:1|2|3;notes?:string;reviews?:CollectionReview[];id:string;revision:number;name:string;purpose?:string;requirements:string[];references:CollectionReference[];voice_examples:CollectionReference[];unresolved:string[];sensitive?:boolean}
+export function referenceKey(ref:CollectionReference){return isOriginalPageReference(ref)?`page:${ref.document_id}@${ref.version}:${ref.original_content_hash}:${ref.page}`:isOriginalFileReference(ref)?`file:${ref.document_id}@${ref.version}:${ref.original_content_hash}`:ref.memory_id ? `memory:${ref.memory_id}` : `document:${ref.document_id}:${ref.chunk_id||''}`;}
+export function uniqueReferences(refs:CollectionReference[]){return [...new Map(refs.map(ref=>[referenceKey(ref),isOriginalPageReference(ref)?originalPageReference(ref):isOriginalFileReference(ref)?originalFileReference(ref):ref])).values()];}
+export function normalizeRequirements(text:string){return text.split('\n').map(value=>value.trim()).filter(Boolean).slice(0,4).map(value=>value.slice(0,240));}
+export function assessmentLabel(assessment?:Assessment){return assessment?.status === 'no_candidates' ? 'No candidates returned' : assessment?.status === 'weak_matches' ? 'Weak matches · review required' : 'Candidates require review';}
+export function downloadText(content:string,format:'markdown'|'json',name:string){const url=URL.createObjectURL(new Blob([content],{type:format==='json'?'application/json':'text/markdown;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`${name.replace(/[^a-z0-9_-]/gi,'-')||'collection'}.${format==='json'?'json':'md'}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+export function citationReference(citation:string):CollectionReference|null {const file=/^\[file:([^\s\[\]@:]+)@([1-9]\d*):([0-9a-f]{64})\]$/.exec(citation);if(file){const ref={document_id:file[1],version:Number(file[2]),original_content_hash:file[3]};return isOriginalFileReference(ref)?ref:null;}const page=/^\[page:([^\s\[\]@:]+)@([1-9]\d*):([0-9a-f]{64}):([1-9]\d*)\]$/.exec(citation);if(page){const ref={document_id:page[1],version:Number(page[2]),original_content_hash:page[3],page:Number(page[4])};return isOriginalPageReference(ref)?ref:null;}const memory=/^\[mem:([^\]]+)\]$/.exec(citation);if(memory)return {memory_id:memory[1]};const source=/^\[doc:([^#\]]+)#([^\]]+)\]$/.exec(citation);return source?{document_id:source[1],chunk_id:source[2]}:null;}
+
+export function collectionBody(draft:Collection,question:string,requirements:string,includeSensitive:boolean,idempotencyKey:string){return {name:draft.name.trim(),purpose:question.trim().slice(0,2000),requirements:normalizeRequirements(requirements),references:uniqueReferences(draft.references).slice(0,50),voice_examples:uniqueReferences(draft.voice_examples).slice(0,20),notes:draft.notes||'',reviews:reviewsForReferences([...draft.references,...draft.voice_examples],draft.reviews||[]),unresolved:draft.unresolved.map(value=>value.trim()).filter(Boolean).slice(0,20).map(value=>value.slice(0,240)),include_sensitive:includeSensitive,idempotency_key:idempotencyKey,...(draft.id?{expected_revision:draft.revision}:{})};}
+
+export function referenceCitation(ref:CollectionReference):string|null{return isOriginalPageReference(ref)?`[page:${ref.document_id}@${ref.version}:${ref.original_content_hash}:${ref.page}]`:isOriginalFileReference(ref)?originalFileCitation(ref):ref.memory_id?`[mem:${ref.memory_id}]`:ref.document_id&&ref.chunk_id?`[doc:${ref.document_id}#${ref.chunk_id}]`:null;}
+export function reviewsForReferences(refs:CollectionReference[],reviews:CollectionReview[]):CollectionReview[]{const selected=new Set(refs.map(referenceCitation).filter(Boolean));return [...new Map(reviews.filter(review=>selected.has(review.citation)).map(review=>[review.citation,review])).values()];}
+export function updateCollectionReview(reviews:CollectionReview[],citation:string,patch:Partial<Pick<CollectionReview,'status'|'note'>>):CollectionReview[]{const existing=reviews.find(review=>review.citation===citation)||{citation,status:'unreviewed' as const,note:''};const next={...existing,...patch};return reviews.some(review=>review.citation===citation)?reviews.map(review=>review.citation===citation?next:review):[...reviews,next];}
+
+/** Route navigation must use an exact citation, never an authored label or URI. */
+export function retrievalPathReference(citation:string):CollectionReference|null {
+ const reference=citationReference(citation);
+ return reference&&reference.document_id?reference:null;
+}
+
+/** Classify actual step support; aggregate hints and review labels cannot upgrade it. */
+export function routeStepSupport(step:RetrievalPathStep):'authored'|'inferred'|'unspecified' {
+ if(step.support==='inferred'||step.assertion_status==='inferred'||step.assertion_status==='uncertain')return 'inferred';
+ return step.support==='authored'?'authored':'unspecified';
+}
+export function routeProvenanceLabel(path:RetrievalPath):string {
+ if(!path.steps.length)return 'Source attachment · structural';
+ const supports=new Set(path.steps.map(routeStepSupport));
+ if(supports.has('unspecified'))return 'Relationship route · support partly unspecified';
+ if(supports.size>1)return 'Relationship route · mixed authored and inferred';
+ return supports.has('authored')?'Relationship route · authored':'Relationship route · inferred';
+}
+
+/** Normalize optional bounded fields for rendering; never manufacture source text. */
+export function findPacket(packet:EvidencePacket):EvidencePacket {
+ const passages=packet.supporting_passages||[];
+ return {...packet,visual_regions:(packet.visual_regions||[]).filter(isVisualRegion),query:packet.query||'',relevant_memories:(packet.relevant_memories||[]).map(memory=>({...memory,kind:memory.kind||'memory',verification:memory.verification||'not_determined',...(memory.provenance?{provenance:{...memory.provenance,sources:(memory.provenance.sources||[]).map(source=>({...passages.find(passage=>passage.citation===source.citation),...source}))}}:{})})),supporting_passages:passages,requirement_checks:packet.requirement_checks||[],missing_information:packet.missing_information||[],usage_guidance:packet.usage_guidance||[],retrieval_assessment:packet.retrieval_assessment||{},...(packet.source_discovery?{source_discovery:{...packet.source_discovery,candidates:(packet.source_discovery.candidates||[]).map(file=>({...file,matched_queries:file.matched_queries||[],matched_fields:file.matched_fields||[]}))}}:{})};
+}
+export function appendFindPage(previous:EvidencePacket,page:EvidencePacket):EvidencePacket {
+ const unique=<T,>(items:T[],key:(item:T)=>string)=>[...new Map(items.map(item=>[key(item),item])).values()];
+ const passages=unique([...previous.supporting_passages,...page.supporting_passages],item=>item.citation);
+ const memories=unique([...previous.relevant_memories,...page.relevant_memories],item=>item.citation);
+ const represented=new Set([...passages,...memories].map(item=>item.citation));
+ const requirements=new Map(previous.requirement_checks.map(check=>[check.query,check]));
+ for(const incoming of page.requirement_checks){const check={...incoming,assessment_page:(previous.loaded_pages||1)+1};const earlier=requirements.get(check.query);requirements.set(check.query,earlier?{...earlier,...check,selected_citations:[...new Set([...(earlier.selected_citations||[]),...(check.selected_citations||[])])],warnings:[...new Set([...(earlier.warnings||[]),...(check.warnings||[])])],retrieval_assessment:{...earlier.retrieval_assessment,...check.retrieval_assessment,candidate_citations:[...new Set([...(earlier.retrieval_assessment.candidate_citations||[]),...(check.retrieval_assessment.candidate_citations||[])])]}}:check);}
+ return {...previous,...page,executed_requirements:previous.executed_requirements,visual_regions:unique([...(previous.visual_regions||[]),...(page.visual_regions||[])],item=>item.citation),loaded_pages:(previous.loaded_pages||1)+1,supporting_passages:passages,relevant_memories:memories,
+ warnings:[...new Set([...(previous.warnings||[]),...(page.warnings||[])])],
+ usage_guidance:[...new Set([...previous.usage_guidance,...page.usage_guidance])],
+ missing_information:unique([...previous.missing_information.map(gap=>({...gap,page:gap.page||1})),...page.missing_information.map(gap=>({...gap,page:(previous.loaded_pages||1)+1}))],item=>JSON.stringify(item)),
+ source_families:unique([...(previous.source_families||[]),...(page.source_families||[])],item=>JSON.stringify(item)),
+ source_leads:unique([...(previous.source_leads||[]),...(page.source_leads||[])],item=>item.record_id||item.citation||JSON.stringify(item)),
+ retrieval:{...previous.retrieval,...page.retrieval,warnings:[...new Set([...(previous.retrieval?.warnings||[]),...(page.retrieval?.warnings||[])])]},
+ // Projection counters describe only the latest page, never accumulated global absence.
+ projection:page.projection,
+ memory_discovery:{...page.memory_discovery,candidates:unique([...(previous.memory_discovery?.candidates||[]),...(page.memory_discovery?.candidates||[])],item=>item.citation||item.memory_id||JSON.stringify(item))},
+ enrichment_discovery:{candidates:unique([...(previous.enrichment_discovery?.candidates||[]),...(page.enrichment_discovery?.candidates||[])],item=>item.record_id||item.citation||JSON.stringify(item))},
+ omitted_references:unique([...(previous.omitted_references||[]),...(page.omitted_references||[])],item=>item.citation||`${item.stream}:${item.rank}`).filter(item=>!represented.has(item.citation||'')),
+ requirement_checks:[...requirements.values()],
+ ...(page.source_discovery||previous.source_discovery?{source_discovery:{...(page.source_discovery||previous.source_discovery)!,candidates:unique([...(previous.source_discovery?.candidates||[]),...(page.source_discovery?.candidates||[])],item=>item.original_citation||`${item.document_id}@${item.version}:${item.content_hash}`)}}:{}),
+ ...(page.retrieval_paths||previous.retrieval_paths?{retrieval_paths:{...(page.retrieval_paths||previous.retrieval_paths)!,paths:unique([...(previous.retrieval_paths?.paths||[]),...(page.retrieval_paths?.paths||[])],item=>JSON.stringify(item))}}:{})};
+}
+
+/** A continuation assessment covers its page, never all accumulated candidates. */
+export function findResultsHeading(packet:EvidencePacket){
+ if(packet.supporting_passages.length||packet.relevant_memories.length)return 'Sources for your question';
+ if(packet.visual_regions?.length)return 'Images and sources to inspect';
+ if(packet.source_discovery?.candidates.length)return 'Files to inspect';
+ if(packet.omitted_references?.length||packet.retrieval_paths?.paths.length)return 'Sources to inspect';
+ return 'No matching excerpts returned';
+}
+
+/** Copy only exact bodies displayed by Ask, never search labels or agent annotations. */
+export function packetContextReferences(packet:EvidencePacket):CollectionReference[] {
+ const passages=packet.supporting_passages.filter(passage=>passage.quote.trim()&&passage.document_id&&passage.chunk_id).map(passage=>({document_id:passage.document_id,chunk_id:passage.chunk_id}));
+ const memories=packet.relevant_memories.filter(memory=>memory.text.trim()&&memory.memory_id).map(memory=>({memory_id:memory.memory_id}));
+ return uniqueReferences([...passages,...memories]);
+}
+export function passageLocation(passage:SourcePassage):string {
+ return [passage.location?.page?`Page ${passage.location.page}`:'',passage.location?.section||'',passage.version?`Version ${passage.version}${passage.is_latest===false?' · Historical':''}`:''].filter(Boolean).join(' · ');
+}
+
+
+/** A display window into the original text, not a summary or retrieval policy. */
+export function passageExcerpt(quote:string,query:string):{text:string;leading:boolean;trailing:boolean;clipped:boolean} {
+ const full={text:quote,leading:false,trailing:false,clipped:false};
+ if(quote.length<=600)return full;
+ const stop=new Set('the and for that this with from what when where which who whom whose why how was were are does did has have had can could would should about into than then there their they them these those your you our its any all more find show tell give please looking need know'.split(' '));
+ const terms=new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(term=>!stop.has(term)));
+ if(!terms.size)return full;
+ const units:{start:number;end:number;score:number}[]=[];
+ // Keep sentence punctuation and line boundaries; offsets always refer to the raw source.
+ const boundaries=[...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\n+/gu)].map(match=>match.index!+match[0].length);
+ if(boundaries.at(-1)!==quote.length)boundaries.push(quote.length);
+ let start=0;
+ for(const end of boundaries){
+  const text=quote.slice(start,end);
+  if(text.trim()){
+   const words=new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);
+   const matches=[...terms].filter(term=>words.has(term)).length;
+   units.push({start,end,score:matches*(/^\s*#{1,6}\s/.test(text)?0.25:1)});
+  }
+  start=end;
+ }
+ const best=units.reduce((selected,unit,index)=>unit.score>(units[selected]?.score||0)?index:selected,-1);
+ if(best<0)return full;
+ // Both adjacent sentences stay attached, including qualifications and negations.
+ let first=Math.max(0,best-1),last=Math.min(units.length-1,best+1);
+ while(units[last].end-units[first].start<420){
+  const before=first>0&&units[last].end-units[first-1].start<=600;
+  const after=last<units.length-1&&units[last+1].end-units[first].start<=600;
+  if(after)last++;else if(before)first--;else break;
+ }
+ // Never cut a sentence merely to force a character limit.
+ let from=units[first].start,to=units[last].end;
+ while(from<to&&/\s/.test(quote[from]))from++;
+ while(to>from&&/\s/.test(quote[to-1]))to--;
+ const leading=!!quote.slice(0,from).trim(),trailing=!!quote.slice(to).trim();
+ return leading||trailing?{text:quote.slice(from,to),leading,trailing,clipped:true}:full;
+}

@@ -1,0 +1,23 @@
+.compact-shell .workspace-top .search-box.unified-search {position:relative;padding-left:10px;overflow:visible;z-index:30}
+.unified-search:focus-within {border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 12%,transparent)}
+.search-group-chip {display:flex;align-items:center;gap:4px;max-width:140px;padding:3px 6px;background:var(--soft);border:1px solid var(--line);border-radius:4px;color:var(--ink);font-size:11px;flex-shrink:0}
+.search-group-chip span {overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.search-clear {display:flex;align-items:center;color:var(--muted);padding:3px;border:0;background:transparent}
+.search-shortcut {flex-shrink:0;font-size:10px;color:var(--muted);white-space:nowrap}
+.unified-search-popover {position:absolute;top:calc(100% + 7px);left:0;right:0;min-width:300px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 36px #0003;padding:5px;overflow:hidden}
+.unified-search-popover [role=listbox] {max-height:min(430px,60vh);overflow:auto}
+.unified-search-section {padding:8px 9px 4px;font-size:10px;color:var(--muted);font-weight:600}
+.unified-search-option {display:flex;align-items:center;gap:9px;padding:8px 9px;min-height:36px;border-radius:5px;font-size:12px;color:var(--ink);cursor:pointer}
+.unified-search-option.selected {background:var(--soft)}
+.unified-search-icon {width:18px;display:flex;justify-content:center;flex-shrink:0;color:var(--muted)}
+.unified-search-copy {flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.unified-search-copy>span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.unified-search-copy small {font-size:10px;color:var(--muted)}
+.unified-search-footer {font-size:10px;color:var(--muted);padding:8px 9px 3px;border-top:1px solid var(--line);margin-top:4px}
+@media(max-width:680px){.search-shortcut{display:none}.search-group-chip{max-width:90px}.unified-search-popover{min-width:240px;right:-50px}}
+
+.compact-shell .search-box.unified-search input:focus-visible {box-shadow:none}
+.search-mode {flex-shrink:0;max-width:101px;height:28px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font:inherit;font-size:11px;padding:0 22px 0 0;cursor:pointer}
+.search-mode option {background:var(--panel);color:var(--ink)}
+.unified-search-empty {padding:12px 9px;margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+@media(max-width:680px){.compact-shell .workspace-top .search-box.unified-search{padding-left:8px}.search-mode{max-width:90px}.unified-search-popover{min-width:0;right:0;width:max(100%,240px);max-width:calc(100vw - 24px)}}

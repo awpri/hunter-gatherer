@@ -1,0 +1,284 @@
+.connection-map {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--canvas, var(--paper));
+  color: var(--ink);
+  font: inherit;
+}
+.connection-map button {font: inherit; cursor: pointer; border: 0;}
+.connection-map button:focus-visible {outline: 2px solid var(--accent); outline-offset: 3px;}
+.cm-toolbar {position: relative; z-index: 4; display: flex; flex-shrink: 0; align-items: center; gap: 7px; padding: 12px 17px; border-bottom: 1px solid var(--line); background: var(--panel, var(--paper));}
+.cm-toolbar > * {pointer-events: auto;}
+.connection-map .cm-tool {padding: 7px 11px; background: var(--panel, var(--paper)); border: 1px solid var(--line); border-radius: 8px; font-size: 10px; color: var(--muted); white-space: nowrap; box-shadow: 0 2px 8px #00000003;}
+.cm-tool:hover, .cm-tool[aria-pressed=true] {background: var(--accent-soft); color: var(--accent);}
+.cm-tool:disabled {opacity: .35; cursor: default;}
+.cm-scope {margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap;}
+.cm-canvas {position: relative; flex: 1; height: 100%; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at 45% 44%, color-mix(in srgb, var(--accent-soft) 65%, transparent), transparent 67%);}
+.cm-canvas::before {position: absolute; inset: 0; content: ''; pointer-events: none; opacity: .3; background-image: radial-gradient(var(--line) .7px, transparent .7px); background-size: 22px 22px; mask-image: linear-gradient(transparent, #000 20%, #000 80%, transparent);}
+.cm-svg {position: relative; display: block; width: 100%; height: 100%; overflow: hidden; cursor: grab; touch-action: none; user-select: none;}
+.dragging .cm-svg {cursor: grabbing;}
+
+/* Geometry shares one world transform. Header type has bounded growth between
+   readable overview and record detail; summaries remain opaque at every zoom. */
+.cm-section text {fill: var(--muted); font: 600 24px inherit; font-size: var(--cm-section-title-size, 24px); font-weight: 600; letter-spacing: -.4px;}
+.cm-section path {fill: none; stroke: var(--line); stroke-width: 1.5;}
+.cm-group {animation: cm-group-arrive .5s cubic-bezier(.16, 1, .3, 1) both;}
+.cm-group-surface {cursor: pointer; outline: none;}
+.cm-group-background {fill: color-mix(in srgb, var(--cluster) 4%, var(--panel, var(--paper))); fill-opacity: .96; stroke: color-mix(in srgb, var(--cluster) 26%, var(--line)); stroke-width: 1.5; transition: fill .2s, stroke .2s, filter .2s;}
+.cm-group.hovered .cm-group-background, .cm-group-surface:focus-visible .cm-group-background {fill: color-mix(in srgb, var(--cluster) 8%, var(--panel, var(--paper))); stroke: var(--cluster); filter: drop-shadow(0 9px 16px #00000009);}
+.cm-group-surface:focus-visible .cm-group-background {stroke-width: 3;}
+.cm-group.selected .cm-group-background {stroke: var(--cluster); stroke-width: 2.5;}
+.cm-group-accent {fill: var(--cluster); opacity: .4; pointer-events: none;}
+.cm-group-copy {font-family: inherit; overflow: hidden; height: 100%; color: var(--ink);}
+.cm-group-eyebrow {display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: var(--cm-group-meta-size, 17px); line-height: 1.35; white-space: nowrap;}
+.cm-group-eyebrow > span:first-child {color: var(--cluster); font-size: calc(var(--cm-group-meta-size, 17px) * 1.2);}
+.cm-count-divider {opacity: .35;}
+.cm-group-copy h3 {overflow: hidden; margin: var(--cm-group-type-gap, 10px) 0 var(--cm-group-type-gap, 13px); color: var(--ink); font-size: var(--cm-group-title-size, 30px); line-height: 1.2; letter-spacing: -1px; font-weight: 580; text-overflow: ellipsis; white-space: nowrap;}
+.cm-group-copy p {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 0; max-width: 100%; overflow: hidden; color: var(--muted); font-size: var(--cm-group-copy-size, 21px); line-height: 1.4; overflow-wrap: anywhere;}
+.cm-group-arrow {fill: var(--cluster); opacity: .6; font-size: 30px; pointer-events: none;}
+.cm-group-divider {stroke: color-mix(in srgb, var(--cluster) 13%, var(--line)); stroke-width: 1; fill: none; pointer-events: none;}
+.cm-summary-stack {opacity: .87;}
+.cm-summary-stack > g {transition: transform .25s ease;}
+.cm-edit-group, .cm-resize {cursor: pointer; outline: none; color: var(--muted);}
+.cm-edit-group rect, .cm-resize rect {fill: transparent; stroke: transparent;}
+.cm-edit-group text {fill: var(--muted); font-size: 27px;}
+.cm-edit-group:hover rect, .cm-edit-group:focus-visible rect, .cm-resize:focus-visible rect {fill: var(--accent-soft); stroke: var(--accent);}
+.cm-resize {cursor: nwse-resize; opacity: .25;}
+.cm-group.hovered .cm-resize, .cm-resize:hover, .cm-resize:focus-visible {opacity: .8;}
+.cm-resize path {stroke: var(--cluster); stroke-width: 2.5; fill: none; stroke-linecap: round;}
+
+.cm-connections {pointer-events: none;}
+.cm-edge {fill: none; stroke: var(--muted); stroke-width: .75; transition: stroke .2s, opacity .2s;}
+.cm-edge.topic {stroke-dasharray: 2 6;}
+.cm-edge.active {stroke: var(--accent); stroke-width: 1;}
+
+.cm-node {cursor: pointer; outline: none;}
+.cm-node-arrival {animation: cm-node-arrive .5s cubic-bezier(.2, 1, .3, 1) both; transform-box: fill-box; transform-origin: center;}
+.cm-hit-area {fill: transparent;}
+.cm-node-halo {fill: var(--cluster); opacity: .07;}
+.cm-node.awake .cm-node-halo {opacity: .16;}
+.cm-format-surface {fill: color-mix(in srgb, currentColor 7%, var(--panel, var(--paper))); stroke: currentColor; stroke-width: 1.1;}
+.cm-format-glyph foreignObject {overflow: visible;}
+.cm-format-glyph foreignObject svg {display: block !important;}
+.cm-memory-surface {fill: color-mix(in srgb, var(--cluster) 15%, var(--panel, var(--paper))); stroke: var(--cluster); stroke-width: 1.8;}
+.cm-memory-orbit {fill: none; stroke: var(--cluster); stroke-width: 1.1; opacity: .55;}
+.cm-memory-core {fill: var(--cluster);}
+.cm-memory-glyph.important .cm-memory-surface {stroke-width: 3;}
+.cm-custom-symbol {color: var(--cluster); line-height: 0;}
+.cm-custom-icon {font-family: inherit; fill: var(--cluster);}
+.cm-custom-image {clip-path: inset(0 round 9px);}
+.cm-record-surface {animation: cm-card-open .18s cubic-bezier(.2, 1, .3, 1) both; transform-box: fill-box; transform-origin: center; fill: var(--panel, var(--paper)); stroke: color-mix(in srgb, var(--cluster) 30%, var(--line)); stroke-width: 1.3; transition: fill .16s, stroke .16s, filter .16s;}
+.cm-node.hovered .cm-record-surface, .cm-node:focus-visible .cm-record-surface {animation: cm-card-open .18s cubic-bezier(.2, 1, .3, 1) both; transform-box: fill-box; transform-origin: center; fill: color-mix(in srgb, var(--cluster) 5%, var(--panel, var(--paper))); stroke: var(--cluster); filter: drop-shadow(0 5px 7px #00000010);}
+.cm-node.selected .cm-record-surface {stroke: var(--cluster); stroke-width: 2.5;}
+.cm-record-kind {overflow: hidden; font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 1px; line-height: 28px; color: var(--cluster); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap;}
+.cm-record-kind span {font-weight: 400; letter-spacing: 0;}
+.cm-record-copy {height: 100%; overflow: hidden; font-family: inherit; color: var(--ink);}
+.cm-record-copy strong {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--record-title, 26px); font-weight: 570; letter-spacing: -.35px; line-height: 1.12;}
+.cm-record-copy p {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin: 6px 0 0; font-size: var(--record-copy, 23px); line-height: 1.15; color: var(--muted);}
+.cm-record-copy.memory-copy p {margin: 0; font-size: var(--record-copy, 23px); line-height: 1.15; color: var(--ink); -webkit-line-clamp: 3;}
+.cm-node-label {font-family: inherit; font-size: 20px; fill: var(--ink); paint-order: stroke; stroke: var(--panel, var(--paper)); stroke-width: 4px; stroke-linejoin: round; pointer-events: none;}
+.cm-fan-card {pointer-events: none; animation: cm-fan .2s ease-out both;}
+.cm-fan-card > rect {fill: color-mix(in srgb, var(--cluster) 5%, var(--panel, var(--paper))); stroke: var(--cluster); stroke-opacity: .4; stroke-width: 1;}
+.cm-focus-ring {fill: none; stroke: transparent; stroke-width: 1.8; pointer-events: none;}
+.cm-node:focus-visible .cm-focus-ring {stroke: var(--cluster); stroke-dasharray: 4 5;}
+.cm-record-edit rect {fill: var(--panel, var(--paper));}
+.cm-record-edit text {fill: var(--muted); font-size: 18px;}
+.cm-live-ring {fill: none; stroke: #6f9bd1; stroke-width: 2.3; transform-box: fill-box; transform-origin: center; pointer-events: none; animation: cm-pulse 1s ease-out 3;}
+.cm-live-ring.write {stroke: #6da98b; animation: cm-write-bloom .9s ease-out 3;}
+.cm-node.live-write .cm-record-surface {stroke: #6da98b;}
+
+/* Overview hover preview is a separate UI surface with its own bounded layout.
+   It never puts screen-size copy inside a miniature world card. */
+.cm-preview-heading {display: flex; align-items: center; gap: 12px;}
+.cm-preview-heading > span {display: flex; min-width: 0; flex-direction: column; gap: 6px; font-size: 9px; color: var(--muted);}
+.cm-preview-heading strong {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 12px; color: var(--ink); line-height: 17px; font-weight: 570;}
+.cm-preview-files {display: flex; flex-direction: column; gap: 3px; margin-top: 13px;}
+.cm-preview-files > div {display: flex; gap: 9px; align-items: center; padding: 7px 9px; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; transform: rotate(-2deg); transform-origin: bottom left;}
+.cm-preview-files > div:nth-child(2) {margin-top: -5px; transform: rotate(1deg);}
+.cm-preview-files > div:nth-child(3) {margin-top: -5px; transform: rotate(3deg);}
+.cm-preview-files span {display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; overflow: hidden;}
+.cm-preview-files strong {overflow: hidden; font-size: 10px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap;}
+.cm-preview-files small {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 9px; color: var(--muted); line-height: 13px;}
+
+.cm-controls {position: absolute; bottom: 15px; left: 17px; display: flex; align-items: center; gap: 4px; padding: 5px; background: var(--panel, var(--paper)); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);}
+.cm-controls button {display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: var(--ink); background: transparent; font-size: 18px;}
+.cm-controls button:hover {background: var(--accent-soft); color: var(--accent);}
+.cm-controls .cm-motion {font-size: 13px; border-left: 1px solid var(--line); margin-left: 3px;}
+.cm-controls span {font-size: 9px; color: var(--muted); min-width: 36px; text-align: center;}
+.cm-legend {position: absolute; right: 18px; bottom: 29px; display: flex; gap: 12px; color: var(--muted); font-size: 9px; pointer-events: none;}
+.cm-legend span {display: flex; align-items: center; gap: 5px;}
+.cm-legend i {display: block;}
+.cm-legend i.memory {height: 6px; width: 6px; border-radius: 50%; background: #6487bb;}
+.cm-legend i.file {height: 8px; width: 6px; border-radius: 1px; background: #bc9560;}
+.cm-legend i.source {width: 14px; border-top: 1px solid var(--muted);}
+.cm-legend i.topic {width: 14px; border-top: 1px dashed var(--muted);}
+.cm-empty {height: 100%; display: grid; place-items: center; color: var(--muted); font-size: 12px;}
+.cm-list {overflow: auto; flex: 1; min-height: 0; padding-top: 0; background: var(--paper);}
+.cm-list article {padding: 13px 20px; border-bottom: 1px solid var(--line);}
+.cm-list article.selected {background: var(--accent-soft);}
+.cm-list article > button {display: flex; gap: 13px; align-items: center; text-align: left; width: 100%; padding: 0; background: transparent; color: var(--ink);}
+.cm-list article > button > span {display: flex; flex-direction: column; gap: 5px;}
+.cm-list strong {font-size: 12px; font-weight: 550;}
+.cm-list small {font-size: 10px; color: var(--muted); line-height: 1.6;}
+.cm-memory-dot {height: 9px; width: 9px; flex-shrink: 0; border-radius: 50%; background: #6487bb;}
+
+@keyframes cm-group-arrive {from {opacity: 0;} to {opacity: 1;}}
+@keyframes cm-card-open {from {transform: scale(.94);} to {transform: scale(1);}}
+@keyframes cm-node-arrive {from {opacity: 0; transform: scale(.72);} to {opacity: 1; transform: scale(1);}}
+@keyframes cm-edge-arrive {from {opacity: 0;} to {opacity: 1;}}
+@keyframes cm-laser-flow {to {stroke-dashoffset: -38;}}
+@keyframes cm-attention {0% {opacity: 0;} 20% {opacity: 1;} 80% {opacity: .8;} 100% {opacity: 0;}}
+@keyframes cm-pulse {0% {transform: scale(.72); opacity: .8;} 100% {transform: scale(1.2); opacity: 0;}}
+@keyframes cm-write-bloom {0% {transform: scale(.3); opacity: .95;} 100% {transform: scale(1.3); opacity: 0;}}
+@keyframes cm-fan {from {opacity: 0;} to {opacity: 1;}}
+@keyframes cm-preview-arrive {from {opacity: 0; transform: translateY(5px);} to {opacity: 1; transform: translateY(0);}}
+.motion-paused .cm-live-ring {animation-play-state: paused;}
+.motion-paused .cm-attention-pulse {display: none;}
+@media (max-width: 700px) {
+  .cm-toolbar {padding: 10px 12px; gap: 5px;}
+  .connection-map .cm-tool {padding: 6px 7px; font-size: 9px;}
+  .cm-scope {font-size: 9px;}
+  .cm-neighborhood {display: none;}
+  .cm-controls {bottom: 12px; left: 12px;}
+  .cm-legend {right: 13px; bottom: 63px; font-size: 8px; gap: 9px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-map *, .connection-map *::before {animation: none !important; transition: none !important;}
+  .cm-live-link circle, .cm-attention-pulse {display: none;}
+}
+[data-motion=reduced] .connection-map * {animation: none !important; transition: none !important;}
+[data-motion=reduced] .cm-live-link circle, [data-motion=reduced] .cm-attention-pulse {display: none;}
+
+.motion-paused .cm-record-surface, .motion-paused .cm-group, .motion-paused .cm-node-arrival, .motion-paused .cm-edge-entry, .motion-paused .cm-fan-card {animation: none;}
+.motion-paused .cm-summary-stack > g {transition: none;}
+
+.cm-summary-preview-card > rect {fill: var(--panel, var(--paper)); stroke: var(--cluster); stroke-width: 1.2; filter: drop-shadow(0 4px 8px #0000000c);}
+.cm-summary-preview-card > text {fill: var(--ink); font-family: inherit; font-size: 10px; font-weight: 560;}
+.cm-summary-preview-card foreignObject div {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-family: inherit; color: var(--muted); font-size: 11px; line-height: 14px;}
+
+/* The active record and its provenance lead the motion hierarchy. */
+.cm-toolbar .cm-tool {display: inline-flex; align-items: center; gap: 6px; transition: background .16s, color .16s, transform .18s, border-color .18s;}
+.cm-tool:hover {transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 35%, var(--line));}
+.cm-tool:active {transform: translateY(1px) scale(.97);}
+.cm-controls {gap: 4px; padding: 5px 7px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 6px 24px #00000014;}
+.cm-controls button {display: grid; place-items: center; width: 32px; height: 30px; border-radius: 7px; transition: background .18s, color .18s, transform .18s;}
+.cm-controls button:hover {background: var(--accent-soft); color: var(--accent); transform: translateY(-1px);}
+.cm-controls button:active {transform: scale(.9);}
+.cm-controls span {min-width: 42px; font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums;}
+.cm-group-background {stroke-width: 1px; vector-effect: non-scaling-stroke;}
+.cm-group.hovered .cm-group-background {filter: drop-shadow(0 6px 12px #00000016);}
+.cm-record-surface {stroke-width: 1px; vector-effect: non-scaling-stroke;}
+.cm-node.hovered .cm-record-surface {stroke-width: 1.5px; filter: drop-shadow(0 4px 7px #00000018);}
+.cm-node-scale {transition: opacity .18s;}
+.cm-node-halo {transition: opacity .22s;}
+.cm-node.hovered .cm-node-halo {opacity: .23;}
+.cm-format-surface, .cm-memory-surface, .cm-memory-orbit {vector-effect: non-scaling-stroke; stroke-width: .8px;}
+.cm-memory-glyph.important .cm-memory-surface {stroke-width: 1.3px;}
+.cm-memory-orbit {stroke-width: .6px;}
+.cm-node.hovered .cm-memory-orbit {opacity: .85;}
+.cm-node.hovered .cm-format-surface {fill: color-mix(in srgb, currentColor 15%, var(--panel));}
+.cm-early-label {font-size: 32px; line-height: 1.2; font-weight: 500; color: var(--ink); background: var(--panel); border-radius: 9px; padding: 4px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-shadow: 0 2px 5px #0000000c;}
+.compact-detail .cm-record-copy strong {-webkit-line-clamp: 2;}
+.full-detail .cm-record-copy strong {-webkit-line-clamp: 2;}
+.full-detail .cm-record-copy:not(.memory-copy) p {-webkit-line-clamp: 1; margin-top: 5px;}
+.cm-node.with-card .cm-record-kind {font-size: 17px; line-height: 28px;}
+
+.motion-paused .cm-memory-orbit {animation: none;}
+@media (prefers-reduced-motion: reduce) {.cm-tool:hover, .cm-controls button:hover, .cm-controls button:active {transform: none;}}
+
+.cm-record-copy strong {overflow-wrap: normal; word-break: normal;}
+
+.cm-record-copy p {overflow-wrap: normal; word-break: normal;}
+.cm-record-copy.memory-copy p {-webkit-line-clamp: 2;}
+.full-detail .cm-record-copy:not(.memory-copy) strong {font-size: min(var(--record-title), 24px);}
+.full-detail .cm-record-copy:not(.memory-copy) p {font-size: min(var(--record-copy), 24px);}
+
+/* A compact control surface shares its space with a persistent preview. */
+.cm-header {display:grid;grid-template-columns:minmax(255px,.9fr) minmax(250px,1.1fr);flex-shrink:0;border-bottom:1px solid var(--line);background:var(--panel);z-index:5;min-height:98px}
+.cm-header .cm-toolbar {display:grid;grid-template-columns:auto auto 1fr auto;align-content:center;gap:7px;padding:12px 16px;border:0;background:transparent;min-width:0}
+.cm-header .cm-toolbar>.board-controls {grid-column:1/-1;grid-row:2;justify-self:start;margin:0}
+.cm-header .cm-scope {display:flex;align-items:center;gap:6px;grid-column:3;grid-row:1;margin-left:auto;font-size:10px}
+.cm-header .cm-help {grid-column:4;grid-row:1}
+.cm-header .cm-neighborhood {grid-row:3;grid-column:1/3}
+.cm-preview-dock {min-width:0;min-height:98px;height:98px;padding:11px 16px;border-left:1px solid var(--line);overflow:hidden;background:color-mix(in srgb,var(--panel) 96%,var(--accent));display:flex;flex-direction:column;justify-content:center;gap:5px}
+.cm-dock-top {display:flex;align-items:center;gap:9px;min-width:0}
+.cm-dock-top>svg,.cm-dock-top>.file-icon {flex-shrink:0;color:var(--muted)}
+.cm-dock-top>div {min-width:0;flex:1;display:flex;align-items:baseline;gap:7px}
+.cm-dock-top small {font:9px var(--font-mono,monospace);text-transform:uppercase;color:var(--muted);flex-shrink:0;max-width:65px;overflow:hidden;text-overflow:ellipsis}
+.cm-dock-top strong {font-size:11px;font-weight:550;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm-preview-dock>p {margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:10px;line-height:15px;color:var(--muted)}
+.cm-dock-links {font-size:9px;color:var(--muted)}
+.cm-preview-open {width:24px;height:24px;display:grid;place-items:center;flex-shrink:0;background:transparent;border-radius:5px;color:var(--muted);transition:background .25s,color .25s}
+.cm-preview-open:hover {color:var(--accent);background:var(--accent-soft)}
+.cm-dock-empty {display:flex;align-items:center;gap:12px;color:var(--muted)}
+.cm-dock-empty>span {display:flex;flex-direction:column;gap:5px}
+.cm-dock-empty strong {font-size:11px;font-weight:500;color:var(--ink)}
+.cm-dock-empty small {font-size:10px}
+.cm-group-eyebrow {gap:var(--cm-group-icon-gap,12px)}
+.cm-group-eyebrow>span:first-child {display:flex;align-items:center;flex-shrink:0}
+.cm-group-counts {display:flex;align-items:baseline;gap:.5em;min-width:0}
+.cm-group-counts .cm-count-divider {margin:0 .05em}
+.cm-canvas::before {display:none}
+.cm-backdrop-grid {display:none}
+:root[data-backdrop=grid] .cm-backdrop-grid {display:block}
+:root[data-backdrop=grid] .cm-backdrop-dots,:root[data-backdrop=none] .cm-backdrop {display:none}
+.cm-node-arrival {animation:cm-group-arrive .65s ease both}
+.cm-record-surface,.cm-node.hovered .cm-record-surface,.cm-node:focus-visible .cm-record-surface {animation:none;transition:fill .3s,stroke .3s,filter .3s}
+.cm-memory-surface,.cm-format-surface,.cm-memory-core,.cm-memory-orbit {transition:fill .3s,stroke .3s,opacity .3s}
+.cm-node.hovered .cm-memory-surface {fill:color-mix(in srgb,var(--cluster) 25%,var(--panel));stroke-width:1.2px}
+.cm-node.hovered .cm-node-halo {opacity:.12}
+.cm-node.awake .cm-node-halo {opacity:.1}
+.cm-tool:hover,.cm-controls button:hover {transform:none}
+.cm-tool:active,.cm-controls button:active {transform:scale(.98)}
+.cm-early-label {transition:opacity .3s}
+.cm-detail-layer {transition:none}
+.cm-detail-layer foreignObject {transition:none}
+@media(max-width:1000px) {
+ .cm-header {grid-template-columns:255px minmax(0,1fr)}
+ .cm-header .cm-toolbar {padding:10px 12px;gap:6px}
+ .cm-preview-dock {padding:10px 12px}
+ .cm-dock-top>div {display:flex;flex-direction:column;gap:0;align-items:stretch}
+ .cm-dock-top strong {line-height:15px}
+ .cm-dock-top small {font-size:8px}
+}
+@media(max-width:540px) {
+ .cm-header {grid-template-columns:minmax(0,1fr);min-height:0}
+ .cm-header .cm-toolbar {display:flex;flex-wrap:nowrap;padding:8px 10px;gap:5px}
+ .cm-header .cm-toolbar>.board-controls {margin:0}
+ .cm-header .cm-scope {font-size:9px;gap:3px}
+ .cm-header .cm-scope>svg {display:none}
+ .cm-header .cm-tool {font-size:9px;padding:5px 6px;gap:4px}
+ .cm-preview-dock {border-left:0;border-top:1px solid var(--line);min-height:76px;height:76px;padding:8px 12px;gap:3px}
+ .cm-dock-top>div {flex-direction:row;align-items:baseline;gap:7px}
+ .cm-preview-dock>p {-webkit-line-clamp:1;line-height:14px}
+ .cm-dock-empty {gap:8px}
+ .cm-dock-empty>span {flex-direction:row;align-items:baseline;gap:8px}
+}
+
+/* The board carries identity; the fixed dock carries the reading copy. */
+.cm-group-copy.cm-group-identity {display:flex;align-items:flex-start;gap:var(--cm-group-icon-gap);padding-top:4px}
+.cm-group-identity .cm-group-symbol {display:flex;flex-shrink:0;align-items:center;justify-content:center;color:var(--cluster);font-size:var(--cm-group-icon-size);line-height:1;width:var(--cm-group-icon-size);height:var(--cm-group-icon-size)}
+.cm-group-identity>div {min-width:0;padding-top:1px}
+.cm-group-copy.cm-group-identity h3 {margin:0 0 .32em;line-height:1.16;letter-spacing:-.025em}
+.cm-group-identity .cm-group-counts {display:block;line-height:1.15;font-size:var(--cm-group-meta-size);color:var(--muted);white-space:nowrap}
+.cm-record-copy strong {line-height:1.1;letter-spacing:-.025em;font-weight:550}
+.cm-detail-layer .cm-record-copy {text-align:center}
+.cm-detail-layer .cm-record-copy strong {-webkit-line-clamp:2}
+.cm-node-scale {transform-origin:0 0}
+
+.cm-cursor-lens {transform-origin:0 0;transition:transform 180ms cubic-bezier(.2,.65,.3,1)}
+@media(prefers-reduced-motion:reduce){.cm-cursor-lens{transition:none}}
+:root[data-motion=reduced] .cm-cursor-lens {transition:none}
+
+/* Constellation is an open network; its bounds still support group navigation. */
+.cm-constellation-aura {fill:var(--cluster);fill-opacity:.035;stroke:var(--cluster);stroke-opacity:.12;stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none;transition:fill-opacity .25s,stroke-opacity .25s}
+.cm-constellation-hit {fill:transparent;stroke:transparent;stroke-width:1;vector-effect:non-scaling-stroke;transition:stroke .25s}
+.cm-constellation .cm-group.hovered .cm-constellation-aura {fill-opacity:.07;stroke-opacity:.3}
+.cm-constellation .cm-group-surface:focus-visible .cm-constellation-hit {stroke:var(--cluster);stroke-dasharray:3 5}
+.cm-constellation .cm-group.selected .cm-constellation-aura {stroke-opacity:.65}
+.cm-constellation .cm-group-arrow {opacity:0}
+.cm-constellation .cm-group.hovered .cm-group-arrow {opacity:.6}

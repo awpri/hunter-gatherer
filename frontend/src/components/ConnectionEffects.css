@@ -1,0 +1,30 @@
+.ce-effects { --ce-color: #77c2ed; --ce-hot: #f1faff; }
+.ce-flow, .ce-ignition { color: var(--ce-color); }
+.ce-file { --ce-color: #8ed7ee; }
+.ce-memory { --ce-color: #bdadf4; }
+.ce-read { --ce-color: #63d3ec; }
+.ce-write { --ce-color: #efba79; }
+.ce-effects path { fill: none; stroke-linecap: round; }
+.ce-guide { stroke: currentColor; stroke-width: 1; opacity: .38; }
+.ce-wake { stroke: currentColor; animation: ce-travel var(--ce-duration) cubic-bezier(.22,.55,.38,1) var(--ce-delay) 1 both; }
+.ce-wake-outer { stroke-width: 9; stroke-dasharray: 22 178; --ce-tail: 22; stroke-opacity: .055; }
+.ce-wake-middle { stroke-width: 5; stroke-dasharray: 14 186; --ce-tail: 14; stroke-opacity: .14; }
+.ce-wake-inner { stroke-width: 2.4; stroke-dasharray: 7 193; --ce-tail: 7; stroke-opacity: .55; }
+.ce-tracer { stroke: var(--ce-hot); stroke-width: 1.5; stroke-dasharray: 1.3 198.7; --ce-tail: 1.3; stroke-opacity: .95; }
+.ce-source-aura { fill: currentColor; animation: ce-ignite-aura var(--ce-duration) ease-out 1 both; }
+.ce-source-core { fill: var(--ce-hot); animation: ce-ignite-core var(--ce-duration) ease-out 1 both; }
+.ce-arrival-core { fill: currentColor; animation: ce-arrival-light var(--ce-duration) ease-out var(--ce-delay) 1 both; }
+:root[data-theme=light] .ce-effects { --ce-color: #347892; --ce-hot: #234853; }
+:root[data-theme=light] .ce-file { --ce-color: #26788c; }
+:root[data-theme=light] .ce-memory { --ce-color: #7962b2; }
+:root[data-theme=light] .ce-read { --ce-color: #207e93; }
+:root[data-theme=light] .ce-write { --ce-color: #a86828; }
+@keyframes ce-travel { 0%, 12% { stroke-dashoffset: calc(25 + var(--ce-tail)); opacity: 0; } 18% { opacity: 1; } 68% { opacity: 1; } 82%, 100% { stroke-dashoffset: calc(-102 + var(--ce-tail)); opacity: 0; } }
+@keyframes ce-ignite-aura { 0% { opacity: 0; } 10% { opacity: .28; } 36%, 100% { opacity: 0; } }
+@keyframes ce-ignite-core { 0% { opacity: 0; } 10%, 17% { opacity: .95; } 38%, 100% { opacity: 0; } }
+@keyframes ce-arrival-light { 0%, 64% { opacity: 0; } 76% { opacity: .9; } 100% { opacity: .28; } }
+.ce-stopped .ce-energy *, .ce-stopped .ce-ignition * { animation-play-state: paused; }
+.ce-stopped .ce-guide { opacity: .38; }
+.ce-reduced .ce-energy, .ce-reduced .ce-ignition { display: none; }
+.ce-reduced .ce-guide { opacity: .55; stroke-width: 1.4; }
+@media (prefers-reduced-motion: reduce) { .ce-energy, .ce-ignition { display: none; } .ce-guide { opacity: .55; } }

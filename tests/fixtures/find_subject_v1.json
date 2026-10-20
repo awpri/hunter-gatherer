@@ -1,0 +1,380 @@
+{
+  "name": "find_subject_v1",
+  "schema_version": 1,
+  "frozen_before_comparison": true,
+  "scope": "Synthetic public-safe subject relevance regression; no personal facts or answer-generation evaluation.",
+  "sources": [
+    {
+      "key": "atlas_rank",
+      "title": "Atlas retrieval ranking decision",
+      "text": "# Atlas retrieval ranking decision\nAtlas retrieval decisions rank subject identity before generic word overlap.\n",
+      "sha256": "28c8dd013f1ed504bcd85f53f0e6636b2f2773091ba432fdce3be19c530d8d5f"
+    },
+    {
+      "key": "atlas_budget",
+      "title": "Atlas retrieval delivery decision",
+      "text": "# Atlas retrieval delivery decision\nAtlas retrieval decisions send short supporting passages first; useful partial evidence is retained.\n",
+      "sha256": "5a2a3512c72d5369a7863477ec14f298adb3015f78b03d17f8a85e9178d1d5eb"
+    },
+    {
+      "key": "atlas_synonyms",
+      "title": "Atlas retrieval synonyms decision",
+      "text": "# Atlas retrieval synonyms decision\nAtlas retrieval decisions retain semantic paraphrases even when a query word is absent.\n",
+      "sha256": "98059df32981ae0da1cafe60286f0d9bc328b3aad77b3d6246d6264347bd4ed5"
+    },
+    {
+      "key": "atlas_cost",
+      "title": "Atlas retrieval cost decision",
+      "text": "# Atlas retrieval cost decision\nAtlas retrieval decisions use existing embeddings and a cheap local ranking pass without a new language model per query.\n",
+      "sha256": "464288165e2ebf3c8464f96c5c85ceab2d48038084a98061a6865d91c80473d6"
+    },
+    {
+      "key": "atlas_dedupe",
+      "title": "Atlas retrieval duplicates decision",
+      "text": "# Atlas retrieval duplicates decision\nAtlas retrieval decisions collapse repeated excerpts while distinct sources remain independently citable.\n",
+      "sha256": "6f7f41d024c3d87f6d28ec4b5cf8af3866fdad446f0369c5ebc8b8e6a3f516c2"
+    },
+    {
+      "key": "atlas_limits",
+      "title": "Atlas retrieval limits decision",
+      "text": "# Atlas retrieval limits decision\nAtlas retrieval decisions allow more than five genuinely relevant sources when the response budget permits.\n",
+      "sha256": "b2106e35c2ef44750d7e17e6e187b0e88353e06ae8b28f6cbefc91d4b4690e5e"
+    },
+    {
+      "key": "atlas_review",
+      "title": "Atlas retrieval evaluation decision",
+      "text": "# Atlas retrieval evaluation decision\nAtlas retrieval decisions measure delivered evidence against frozen source labels and check lost relevant evidence.\n",
+      "sha256": "65b286f4ffffce0b70b98ef65677264f73e1142038db245f6dd2364982e2b20f"
+    },
+    {
+      "key": "atlas_overview",
+      "title": "Atlas project overview",
+      "text": "# Atlas project overview\nAtlas is an evidence library storing source files and notes. Its icon is a blue compass; this overview describes branding.\n",
+      "sha256": "5791ae5130b71b23172a795524d21bd95365a3398cfdb4c640f27a19ab934c90"
+    },
+    {
+      "key": "animation_retrieval",
+      "title": "Kestrel animation retrieval decisions",
+      "text": "# Kestrel animation retrieval decisions\nKestrel retrieves Blender texture assets from a shared drive. Retrieval decisions select the newest PNG and exclude broken thumbnails. Retrieval ranking uses texture dimensions.\n",
+      "sha256": "fb04461b7d2e36889bc6260d5197a6dce3d12c0c221ad9a4e16e2c53ce126e53"
+    },
+    {
+      "key": "general_retrieval",
+      "title": "General information retrieval glossary",
+      "text": "# General information retrieval glossary\nRetrieval systems rank search results by similarity. Retrieval decisions include precision, recall, ranking and delivery. This glossary defines general search concepts.\n",
+      "sha256": "f25de0261bae0887bde165999f286ba798ca36b9de384fe9e0c0595b732f8396"
+    },
+    {
+      "key": "atlas_restore",
+      "title": "Atlas backup restoration checklist",
+      "text": "# Atlas backup restoration checklist\nBefore restoring an Atlas snapshot, pause writers. Resume writes after the checksum audit passes. Rebuild the retrieval index from restored files.\n",
+      "sha256": "3206cf095bdc0139d8c0f2badee38f69979d1bd65a6c9cbdb3d33caf8c9789a1"
+    },
+    {
+      "key": "riverside_partial",
+      "title": "Riverside interruption test",
+      "text": "# Riverside interruption test\nDisconnected Riverside tablets kept unsent changes. Twelve simulated devices completed the reconnect exercise. A field success rate has not been measured.\n",
+      "sha256": "0640b07034edba1279ad04ff0a566f328f9a1aeff53d1dd12f8e167ebda4bb88"
+    },
+    {
+      "key": "riverside_topic",
+      "title": "Riverside brand notes",
+      "text": "# Riverside brand notes\nThe Riverside tablet inspection app uses a green river logo. Its brand guide recommends short labels for recovery and synchronization screens.\n",
+      "sha256": "3d5cdf0560bef4bd2d5dd01058c8e15ea5cafd799a21cbac4bebaa789e1077f4"
+    },
+    {
+      "key": "tablet_journal",
+      "title": "Tablet journal approval record",
+      "text": "# Tablet journal approval record\nThe inspection tablet project is also called Riverside. An administrator must approve the recovery bundle before replacing a device. Pending edits remain locked until the key is recovered.\n",
+      "sha256": "c59644e13bf89453ee7dcfd67dca831ae112ee0dbd751f60880188f206fbce12"
+    },
+    {
+      "key": "northstar_absent",
+      "title": "Offline map package handoff",
+      "text": "# Offline map package handoff\nThe download service is internally codenamed Northstar. The package worker retains the previous bundle until the replacement checksum has been verified.\n",
+      "sha256": "90f4242159298fe9368ebf5d9aa536e92dd579d10767505ee2d8cfbf7a876e06"
+    }
+  ],
+  "memories": [],
+  "questions": [
+    {
+      "id": "subject-decisions",
+      "query": "Atlas retrieval decisions",
+      "kind": "subject_generic_overlap",
+      "evidence": [
+        {
+          "source": "atlas_rank",
+          "anchors": [
+            "rank subject identity before generic word overlap"
+          ]
+        },
+        {
+          "source": "atlas_budget",
+          "anchors": [
+            "send short supporting passages first; useful partial evidence is retained"
+          ]
+        },
+        {
+          "source": "atlas_synonyms",
+          "anchors": [
+            "retain semantic paraphrases even when a query word is absent"
+          ]
+        },
+        {
+          "source": "atlas_cost",
+          "anchors": [
+            "use existing embeddings and a cheap local ranking pass without a new language model per query"
+          ]
+        },
+        {
+          "source": "atlas_dedupe",
+          "anchors": [
+            "collapse repeated excerpts while distinct sources remain independently citable"
+          ]
+        },
+        {
+          "source": "atlas_limits",
+          "anchors": [
+            "allow more than five genuinely relevant sources when the response budget permits"
+          ]
+        },
+        {
+          "source": "atlas_review",
+          "anchors": [
+            "measure delivered evidence against frozen source labels and check lost relevant evidence"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "atlas_rank",
+          "anchors": [
+            "rank subject identity before generic word overlap"
+          ]
+        },
+        {
+          "source": "atlas_budget",
+          "anchors": [
+            "send short supporting passages first; useful partial evidence is retained"
+          ]
+        },
+        {
+          "source": "atlas_synonyms",
+          "anchors": [
+            "retain semantic paraphrases even when a query word is absent"
+          ]
+        },
+        {
+          "source": "atlas_cost",
+          "anchors": [
+            "use existing embeddings and a cheap local ranking pass without a new language model per query"
+          ]
+        },
+        {
+          "source": "atlas_dedupe",
+          "anchors": [
+            "collapse repeated excerpts while distinct sources remain independently citable"
+          ]
+        },
+        {
+          "source": "atlas_limits",
+          "anchors": [
+            "allow more than five genuinely relevant sources when the response budget permits"
+          ]
+        },
+        {
+          "source": "atlas_review",
+          "anchors": [
+            "measure delivered evidence against frozen source labels and check lost relevant evidence"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "budget-partial",
+      "query": "What does Atlas choose for retrieval delivery, and what is its measured latency?",
+      "kind": "partial_evidence",
+      "evidence": [
+        {
+          "source": "atlas_budget",
+          "anchors": [
+            "send short supporting passages first"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "atlas_budget",
+          "anchors": [
+            "send short supporting passages first"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synonym-preservation",
+      "query": "How does Atlas keep differently worded evidence when literal terms are missing?",
+      "kind": "semantic_paraphrase",
+      "evidence": [
+        {
+          "source": "atlas_synonyms",
+          "anchors": [
+            "retain semantic paraphrases"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "atlas_synonyms",
+          "anchors": [
+            "retain semantic paraphrases"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cheap-ranking",
+      "query": "Does Atlas add a language-model call to each search?",
+      "kind": "semantic_paraphrase",
+      "evidence": [
+        {
+          "source": "atlas_cost",
+          "anchors": [
+            "without a new language model per query"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "atlas_cost",
+          "anchors": [
+            "without a new language model per query"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "restore-paraphrase",
+      "query": "When can Atlas accept changes again after recovering a saved snapshot?",
+      "kind": "semantic_paraphrase",
+      "evidence": [
+        {
+          "source": "atlas_restore",
+          "anchors": [
+            "Resume writes after the checksum audit passes"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "atlas_restore",
+          "anchors": [
+            "Resume writes after the checksum audit passes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "recovery-partial",
+      "query": "What happened in the Riverside tablet reconnect test, and what is the field success rate?",
+      "kind": "partial_evidence",
+      "evidence": [
+        {
+          "source": "riverside_partial",
+          "anchors": [
+            "Twelve simulated devices",
+            "field success rate has not been measured"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "riverside_partial",
+          "anchors": [
+            "Twelve simulated devices",
+            "field success rate has not been measured"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alias-project",
+      "query": "Who must authorize Riverside device replacement?",
+      "kind": "proper_name_absent_from_evidence",
+      "evidence": [
+        {
+          "source": "tablet_journal",
+          "anchors": [
+            "An administrator must approve the recovery bundle"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "tablet_journal",
+          "anchors": [
+            "An administrator must approve the recovery bundle"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alias-passage",
+      "query": "What does Northstar keep while checking a replacement download?",
+      "kind": "proper_name_absent_from_evidence",
+      "evidence": [
+        {
+          "source": "northstar_absent",
+          "anchors": [
+            "retains the previous bundle until the replacement checksum has been verified"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "northstar_absent",
+          "anchors": [
+            "retains the previous bundle until the replacement checksum has been verified"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "animation-subject",
+      "query": "How does Kestrel choose Blender texture assets for retrieval?",
+      "kind": "different_subject",
+      "evidence": [
+        {
+          "source": "animation_retrieval",
+          "anchors": [
+            "select the newest PNG",
+            "exclude broken thumbnails"
+          ]
+        }
+      ],
+      "relevant_sources": [
+        {
+          "source": "animation_retrieval",
+          "anchors": [
+            "select the newest PNG",
+            "exclude broken thumbnails"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "no-answer",
+      "query": "What did Lumen decide about retrieval ranking?",
+      "kind": "wholly_unanswerable",
+      "evidence": [],
+      "relevant_sources": []
+    }
+  ],
+  "limitations": [
+    "Manual source and anchor labels exclude topic-only and generic overlap documents.",
+    "Partial evidence is relevant without answering every part of a question.",
+    "Proper-name-absence cases keep identity in source context while supporting anchors omit the name.",
+    "Seven independent relevant sources guard against a universal five-result cap.",
+    "Hashing embeddings are an offline lexical check, not a claim about semantic-model quality or population precision."
+  ]
+}

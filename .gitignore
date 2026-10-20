@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+!frontend/src/lib/
+!frontend/src/lib/**
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ProHarness runtime artifacts
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.archive/
+*.sqlite.archive/
+*.sqlite3.archive/
+docker/nas/data/
+
+# Models / caches (large, machine-local)
+/models/
+*.gguf
+
+# Frontend (node deps + build temp; the built static/ is committed)
+node_modules/
+node_modules
+frontend/node_modules/
+*.tsbuildinfo
+frontend/.vite/
+npm-debug.log*
+yarn-error.log
+.ruff_cache/
+
+.venv-docling/
+
+.docling-models/
+
+.ocr-setup-cache/
+
+# Private agent workspace state (tracked/history copies require separate review)
+.mimosa/
+.zcode/
+
+# Additional local environment variants
+.env.*
+!.env.example

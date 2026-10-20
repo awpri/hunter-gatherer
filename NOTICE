@@ -1,0 +1,18 @@
+hunter/gatherer
+Copyright 2026 hunter/gatherer contributors
+Originally developed as ProHarness (Copyright 2026 ProHarness contributors).
+
+Project source is licensed under the Apache License, Version 2.0.
+See LICENSE for the complete terms.
+
+Bundled third-party assets retain their own licenses:
+- Geist and Geist Mono: Copyright 2024 The Geist Project Authors, SIL Open
+  Font License 1.1. Includes the outlined Geist lettering used in the wordmark.
+  Full notice: proharness/server/library_static/fonts/OFL.txt.
+- Lucide icons: ISC notice for Lucide Icons and Contributors; listed Feather
+  derivatives retain Cole Bemis's MIT notice. Full combined notice:
+  proharness/server/library_static/licenses/Lucide-LICENSE.txt.
+
+Frontend dependencies and Python dependencies retain their upstream licenses.
+The project license does not replace those terms. Dependency manifests record
+selected versions.

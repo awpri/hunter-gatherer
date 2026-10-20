@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "proharness"
+version = "0.1.0"
+description = "hunter/gatherer: a local evidence library with quote-first search and a compact MCP interface."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "hunter/gatherer contributors" }]
+
+dependencies = [
+    # Core
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "httpx>=0.27",
+    "rich>=13.7",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    # Cloud model SDKs
+    "openai>=1.30",
+    "anthropic>=0.25",
+    # Memory: vector store + embeddings
+    "qdrant-client>=1.10",
+    "sentence-transformers>=3.0",
+    # MCP server (tool interface)
+    "mcp>=2.0,<3",
+    # UI server
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+    # Personal evidence archive (imported lazily by PDF ingestion)
+    "pypdf>=5.0",
+    # Voice (imported lazily; heavy)
+    # faster-whisper, silero-vad, sounddevice are optional extras below.
+]
+
+[project.optional-dependencies]
+document-view = [
+    "pypdfium2>=5.14,<6",  # local render-only worker; no OCR/model downloads
+    "Pillow>=12.3,<13",    # bounded PNG encoding inside the worker
+]
+document-recovery = [
+    "docling>=2,<3",  # optional offline PDF layout/OCR worker; models prefetched separately
+]
+pgcontext = [
+    "psycopg[binary]>=3.2,<4",  # explicit local-only candidate-index experiment
+]
+voice = [
+    "faster-whisper>=1.0",
+    "silero-vad>=5.1",
+    "sounddevice>=0.4",
+    "numpy>=1.26",
+    "torchaudio>=2.2",
+]
+tts = [
+    "piper-tts>=1.2",  # local TTS; optional
+]
+local = [
+    "sqlite-vec>=0.1.6",  # local-only fallback when Qdrant is unavailable
+]
+desktop = [
+    "pywebview>=5.0",  # native desktop window shell
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Repository = "https://github.com/awpri/hunter-gatherer"
+Issues = "https://github.com/awpri/hunter-gatherer/issues"
+
+[project.scripts]
+proharness = "proharness.cli:main"
+proharness-mcp = "proharness.mcp.server:main"
+proharness-ui = "proharness.server.desktop:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["proharness"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]  # rich formatter wraps prose; trust it
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

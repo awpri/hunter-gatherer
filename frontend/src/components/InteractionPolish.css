@@ -1,0 +1,105 @@
+/* Navigation, surfaces and the canvas update immediately in both modes.
+   Subtle preserves finite control feedback without ambient or layout motion. */
+:root[data-motion] * {scroll-behavior:auto !important}
+:root[data-motion] :is(.record-row,.group-item,.view-title h1,.library-content,
+  .inspector,.modal,.notice,.board-tools,.visual-picker,.command-palette,
+  .command-palette-backdrop,.proharness-mark,.row-activity,.loading-orbit span,
+  .loading-record span,.activity-status.is-active .activity-dot,.brand-mark.agent-active) {
+  animation:none !important;
+}
+:root[data-motion] :is(.cm-svg,.cm-svg *,.sidebar-section-body,.visual-dropzone) {
+  animation:none !important;
+  transition:none !important;
+}
+:root[data-motion] :is(.record-row,.source-link) {
+  transition:background-color 110ms ease-out,border-color 110ms ease-out,
+    color 110ms ease-out,box-shadow 110ms ease-out;
+}
+.library-shell .records-cards .record-row:hover,
+:root[data-motion] .record-row:active,
+:root[data-motion] .source-link:active,
+:root[data-motion] .visual-dropzone.drag-over {transform:none}
+.library-shell .source-link:hover {padding-left:0}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-motion=system] button:not(.record-row):not(.source-link),
+  :root[data-motion=system] a.button {
+    transition:background-color 110ms ease-out,border-color 110ms ease-out,
+      color 110ms ease-out,box-shadow 110ms ease-out,transform 90ms ease-out;
+  }
+  :root[data-motion=system] :is(.navigation-item>svg,.top-actions .button>svg,
+    .record-row .memory-icon,.record-row>.ph-file-icon,.group-subject-icon,
+    .board-customize>svg:last-child) {
+    transition:transform 140ms ease-out,color 110ms ease-out,background-color 110ms ease-out;
+  }
+  :root[data-motion=system] :is(.button,.cm-tool,.cm-controls button,.icon-button,.navigation-item):active:not(:disabled) {
+    transform:translateY(1px) scale(.97);
+  }
+  :root[data-motion=system] :is(.cm-tool,.button.primary) {position:relative;overflow:hidden}
+  :root[data-motion=system] :is(.cm-tool,.button.primary)::after {
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(105deg,transparent 20%,color-mix(in srgb,currentColor 15%,transparent) 50%,transparent 80%);
+    transform:translateX(-100%);
+  }
+  :root[data-motion=system] :is(.cm-tool,.button.primary):is(:hover,:focus-visible):not(:disabled)::after {
+    animation:control-selection-sheen 420ms ease-out both;
+  }
+}
+@keyframes control-selection-sheen {
+  from {transform:translateX(-100%)}
+  to {transform:translateX(100%)}
+}
+:root[data-motion=reduced] button:active,
+:root[data-motion=reduced] :is(.cm-tool,.cm-controls button,.visual-icon-choice):hover,
+:root[data-motion=reduced] :is(.navigation-item>svg,.top-actions .button>svg,
+  .record-row .memory-icon,.record-row>.ph-file-icon,.group-subject-icon) {transform:none !important}
+:root[data-motion=reduced] .navigation-item.active::after {display:none}
+@media (prefers-reduced-motion: reduce) {
+  button:active,:is(.cm-tool,.cm-controls button,.visual-icon-choice):hover,
+  :is(.navigation-item>svg,.top-actions .button>svg,.record-row .memory-icon,
+    .record-row>.ph-file-icon,.group-subject-icon) {transform:none !important}
+}
+
+/* The reader has one inset, including metadata nested inside its heading. */
+.source-reader {--reader-inset:24px}
+.source-reader .record-detail-heading {padding:20px var(--reader-inset) 16px}
+.source-reader .record-detail-heading h2 {margin:0 0 10px}
+.source-reader .record-detail-heading>p {margin:0 0 16px}
+.source-reader .record-detail-heading .detail-meta {padding:0;margin:0;gap:10px}
+.source-reader .detail-meta>div {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:baseline}
+.source-reader .reader-actions {margin:0;padding:0 var(--reader-inset) 16px;gap:8px}
+.source-reader .reader-actions .button {min-height:32px;text-decoration:none}
+.source-reader .reader-view-switch {margin:0 var(--reader-inset) 16px}
+.source-reader .detail-section {padding-left:var(--reader-inset);padding-right:var(--reader-inset)}
+.source-reader .reader-outline {margin:16px var(--reader-inset)}
+.source-reader .warning-box {margin-left:var(--reader-inset);margin-right:var(--reader-inset)}
+.source-reader .original-page-preview {margin-top:0}
+.source-reader .page-preview-controls {gap:10px 16px;justify-content:space-between}
+.page-preview-pagination,.source-reader .page-preview-zoom {display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.page-preview-pagination>span {font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.source-reader .page-preview-zoom {margin-left:0;width:auto;justify-content:flex-start}
+.page-preview-controls .button {min-height:30px}
+.page-preview-controls .text-button {min-width:46px;min-height:30px;text-align:center}
+@media (max-width:640px) {.source-reader {--reader-inset:18px}}
+
+/* Preview content never changes the canvas size. Keep both control rows and
+   two lines of preview copy reserved, including empty and short previews. */
+.connection-map {container-type:inline-size}
+.cm-header {grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);grid-template-rows:112px;min-height:0}
+.cm-header .cm-toolbar {display:flex;flex-direction:column;flex-wrap:nowrap;justify-content:center;align-items:stretch;gap:8px;padding:12px 16px;min-height:0}
+.cm-toolbar-row {display:flex;align-items:center;gap:8px;min-width:0;min-height:30px}
+.cm-toolbar-row>.cm-tool,.cm-toolbar-row>.cm-help {flex:0 0 auto}
+.cm-header .cm-scope {margin:0;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cm-header .cm-scope>svg {flex-shrink:0}
+.cm-toolbar-secondary>.board-controls {flex:0 0 auto;margin:0}
+.cm-header .cm-neighborhood {width:auto;flex:0 0 auto;justify-content:center}
+.cm-header .cm-preview-dock {height:100%;min-height:0;padding:12px 16px}
+.cm-header .cm-preview-dock>p {height:30px;min-height:30px;flex-shrink:0;line-height:15px;-webkit-line-clamp:2}
+.cm-header .cm-dock-links {height:14px;line-height:14px;flex-shrink:0}
+.cm-header .board-controls-bar {flex-wrap:nowrap;gap:6px}
+.cm-header .cm-preview-dock .cm-record-icon {flex-shrink:0}
+@container (max-width:760px) {
+  .cm-header {grid-template-columns:minmax(0,1fr);grid-template-rows:96px 104px}
+  .cm-header .cm-toolbar {padding:10px 14px}
+  .cm-header .cm-preview-dock {border-left:0;border-top:1px solid var(--line);padding:12px 14px}
+}
