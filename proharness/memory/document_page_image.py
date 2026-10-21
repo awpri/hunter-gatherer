@@ -54,7 +54,8 @@ def _worker_render(data, page, max_side, *, timeout_seconds=RENDER_TIMEOUT_SECON
 
 def _worker_render_owned(data, page, max_side, *, timeout_seconds=RENDER_TIMEOUT_SECONDS, fit_to_byte_limit=False, region_bbox=None):
     process = temporary = None
-    deadline = time.monotonic() + min(RENDER_TIMEOUT_SECONDS, timeout_seconds)
+    budget = min(RENDER_TIMEOUT_SECONDS, timeout_seconds)
+    deadline = time.monotonic() + budget
     try:
         interpreter = os.environ.get("PROHARNESS_PAGE_IMAGE_PYTHON", sys.executable)
         if not interpreter or not Path(interpreter).is_absolute() or not Path(interpreter).is_file():
@@ -75,7 +76,9 @@ def _worker_render_owned(data, page, max_side, *, timeout_seconds=RENDER_TIMEOUT
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    start_new_session=(os.name == "posix"), close_fds=True)
         try:
-            process.wait(timeout=max(0, deadline - time.monotonic()))
+            # A coarse monotonic clock can return the start value again; floating
+            # point subtraction must not make the remaining wait exceed budget.
+            process.wait(timeout=max(0, min(budget, deadline - time.monotonic())))
         except subprocess.TimeoutExpired:
             return error("render_timeout", "PDF page rendering exceeded its time limit; no image returned.", 504)
         if time.monotonic() >= deadline:

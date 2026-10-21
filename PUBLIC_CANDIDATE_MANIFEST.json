@@ -1208,8 +1208,8 @@
     },
     {
       "path": "proharness/memory/document_page_image.py",
-      "bytes": 16094,
-      "sha256": "76d41ee83e718895206c7e1642ec08b82b15ca874ff1a37107457fb6a41df162"
+      "bytes": 16289,
+      "sha256": "b7670e13a0ba305e9420056bc753623de64ddc7a324021d0dfdebc8522312ff3"
     },
     {
       "path": "proharness/memory/document_recovery.py",
@@ -2008,8 +2008,8 @@
     },
     {
       "path": "tests/test_page_image_fit_backend.py",
-      "bytes": 6545,
-      "sha256": "7396e7216a27ad6703bc3bf4ee7c0ccbfd50dedd53907677d844366c78b8ee18"
+      "bytes": 6692,
+      "sha256": "16118ef730f076077f20dc4e44aa2610d9f20052cad31a7921b51760cb532b72"
     },
     {
       "path": "tests/test_page_image_fit_interfaces.py",

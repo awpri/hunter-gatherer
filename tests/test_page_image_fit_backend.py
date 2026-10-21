@@ -107,6 +107,8 @@ def test_remaining_deadline_forwarded_once_and_expiry_rejects_output(store, tmp_
 
 def test_one_owned_process_deadline_and_cleanup(monkeypatch):
     paths, killed, commands, waits = [], [], [], []
+    # Reproduce a coarse clock tick: (1000.0 + 0.2) - 1000.0 is slightly > 0.2.
+    monkeypatch.setattr(backend.time, 'monotonic', lambda: 1000.0)
     class Process:
         pid = 878787
         returncode = None
