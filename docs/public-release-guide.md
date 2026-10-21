@@ -25,7 +25,8 @@ python3 -m venv .venv
 ```
 
 Open http://127.0.0.1:8767/. On Windows, virtual-environment executables live in
-`.venv/Scripts` instead of `.venv/bin`; Windows validation is still outstanding.
+`.venv/Scripts` instead of `.venv/bin`. See the [Windows setup instructions](getting-started.md#windows-powershell)
+and [current platform checks](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml).
 The demo target must be new or empty. It uses only fictional Lantern project
 sources, a separate SQLite database and deterministic hashing embeddings. It
 ignores normal configuration and downloads no model weights. Installing Python

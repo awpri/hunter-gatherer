@@ -143,8 +143,8 @@
     },
     {
       "path": "docs/public-release-guide.md",
-      "bytes": 7836,
-      "sha256": "8d70e1ee158b6944d5c48fc5b05bdaed1aadf13135a903460083a8c871177a19"
+      "bytes": 7980,
+      "sha256": "0d4e60a539e8154ee44b449964e368abe5d45830da35a42cb016e77442899904"
     },
     {
       "path": "docs/release-provenance-20261014.md",
