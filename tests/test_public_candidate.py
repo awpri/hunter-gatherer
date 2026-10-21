@@ -29,18 +29,24 @@ def test_selected_boundary_and_local_markdown_links(exporter):
     for name in selected:
         if not name.endswith(".md"):
             continue
-        for target in re.findall(r"\]\(([^)]+)\)", exporter.export_bytes(name).decode()):
+        content = exporter.export_bytes(name).decode()
+        targets = re.findall(r"\]\(([^)]+)\)", content)
+        targets += re.findall(r'(?:src|href)=["\x27]([^"\x27]+)["\x27]', content)
+        for target in targets:
             if ":" in target or target.startswith("#"):
                 continue
             relative = str(Path(name).parent / target.split("#")[0])
             normalized = (REPO / relative).resolve().relative_to(REPO).as_posix()
-            assert normalized in selected, (name, target)
+            assert normalized in selected or (
+                (REPO / normalized).is_dir()
+                and any(path.startswith(normalized.rstrip("/") + "/") for path in selected)
+            ), (name, target)
 
 
 def test_manifest_hashes_actual_readme_and_refuses_reuse(exporter, monkeypatch, tmp_path, capsys):
     root = tmp_path / "source"
     root.mkdir()
-    (root / "README.md").write_text("Excluded private working README")
+    (root / "README.md").write_text("Public project overview\n[License](LICENSE)")
     (root / "docs").mkdir()
     (root / "docs/public-release-guide.md").write_text("[License](../LICENSE)")
     (root / "LICENSE").write_text("Synthetic license marker")
@@ -50,8 +56,9 @@ def test_manifest_hashes_actual_readme_and_refuses_reuse(exporter, monkeypatch, 
     monkeypatch.setattr(sys, "argv", ["export", "--destination", str(destination)])
     assert exporter.main() == 0
     readme = (destination / "README.md").read_bytes()
-    assert readme == b"[License](LICENSE)"
+    assert readme == b"Public project overview\n[License](LICENSE)"
     manifest = json.loads((destination / "PUBLIC_CANDIDATE_MANIFEST.json").read_text())
+    assert manifest["readme_source"] == "README.md"
     entry = next(e for e in manifest["files"] if e["path"] == "README.md")
     assert entry["bytes"] == len(readme)
     assert entry["sha256"] == hashlib.sha256(readme).hexdigest()
@@ -88,4 +95,5 @@ def test_product_contract_suites_are_in_review_boundary(exporter):
         "tests/test_internal_recall_privacy.py", "tests/test_navigation_source_info.py",
         "tests/test_document_page_image.py", "tests/test_document_page_image_transport.py",
         "tests/test_page_image_fit_backend.py", "tests/test_original_page_mcp_workflow.py",
+        "tests/test_secure_files.py",
     } <= selected

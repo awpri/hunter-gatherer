@@ -21,6 +21,7 @@ from pathlib import Path
 
 from proharness.memory.evidence import _source_refs, is_sensitive_memory
 from proharness.memory.schemas import Memory
+from proharness.memory.secure_files import open_regular
 
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _SUFFIX = re.compile(r"(?:\.[a-z0-9_-]{1,24})?\Z")
@@ -100,32 +101,12 @@ def _managed_path(db_file, raw, digest):
 
 def _inspect_original(path, *, verify, budget):
     """Traverse with directory descriptors so symlink swaps cannot escape root."""
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-    parent = None
     stream_fd = None
     read_bytes = 0
     try:
-        parent = os.open(path.anchor, flags | os.O_DIRECTORY)
-        for part in path.parts[1:-1]:
-            try:
-                info = os.stat(part, dir_fd=parent, follow_symlinks=False)
-                if stat.S_ISLNK(info.st_mode):
-                    return "unsafe_original_path", None, 0
-                next_fd = os.open(part, flags | os.O_DIRECTORY, dir_fd=parent)
-            except OSError as exc:
-                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
-                    return "unsafe_original_path", None, 0
-                raise
-            os.close(parent)
-            parent = next_fd
-        info = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISREG(info.st_mode):
-            return "unsafe_original_path", None, 0
+        stream_fd = open_regular(path)
         if not verify:
             return None, None, 0
-        if info.st_size > min(_MAX_FILE, budget):
-            return "original_verification_budget_exceeded", None, 0
-        stream_fd = os.open(path.name, flags, dir_fd=parent)
         opened = os.fstat(stream_fd)
         if not stat.S_ISREG(opened.st_mode):
             return "unsafe_original_path", None, 0
@@ -152,8 +133,6 @@ def _inspect_original(path, *, verify, budget):
     finally:
         if stream_fd is not None:
             os.close(stream_fd)
-        if parent is not None:
-            os.close(parent)
 
 
 def library_health(store, *, include_sensitive=False, verify_originals=False, limit=100) -> dict:

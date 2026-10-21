@@ -188,7 +188,7 @@ def test_metadata_never_displaces_baseline_sources(store, tmp_path, monkeypatch,
         assert result["source_info_omitted"] == "output_budget"
 
 
-@pytest.mark.parametrize("title", [b"invalid title", "雪" * 20000])
+@pytest.mark.parametrize("title", [b"invalid title", "雪" * 20000], ids=["invalid-bytes", "oversized-unicode"])
 def test_malformed_and_oversized_labels_are_unknown_with_whole_field_warnings(store, tmp_path, monkeypatch, title):
     _, document, _, chunks = _source(store, tmp_path, monkeypatch)
     store._sqlite.execute(

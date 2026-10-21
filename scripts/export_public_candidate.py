@@ -37,20 +37,21 @@ PUBLIC_TESTS = (
     "tests/test_page_image_fit_review.py", "tests/test_page_image_fit_worker.py",
     "tests/test_original_page_mcp_workflow.py", "tests/test_visual_regions.py",
     "tests/test_original_page_collections.py",
+    "tests/test_secure_files.py",
 )
 PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json",)
-PUBLIC_DOCS = ("docs/public-release-guide.md", "docs/release-provenance-20261014.md", "docs/visual-regions.md")
+PUBLIC_DOCS = (
+    "docs/public-release-guide.md", "docs/release-provenance-20261014.md", "docs/visual-regions.md",
+    "docs/index.md", "docs/getting-started.md", "docs/usage.md", "docs/mcp.md",
+    "docs/faq.md", "docs/roadmap.md", "docs/assets/wordmark.svg", "CONTRIBUTING.md",
+    ".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml",
+    ".github/ISSUE_TEMPLATE/config.yml", ".github/pull_request_template.md",
+)
 
 
 def export_bytes(name):
-    """Use the self-contained public guide as README; record its actual bytes."""
-    source = "docs/public-release-guide.md" if name == "README.md" else name
-    data = (ROOT / source).read_bytes()
-    if name == "README.md":
-        data = data.replace(b"](release-provenance-20261014.md)", b"](docs/release-provenance-20261014.md)")
-        data = data.replace(b"](visual-regions.md)", b"](docs/visual-regions.md)")
-        data = data.replace(b"](../LICENSE)", b"](LICENSE)").replace(b"](../NOTICE)", b"](NOTICE)")
-    return data
+    """Preserve reviewed source bytes, including the public repository README."""
+    return (ROOT / name).read_bytes()
 
 
 def selected_paths():
@@ -120,7 +121,7 @@ def main():
             "purpose": "private review candidate; not cleared for publication",
             "excluded": ["Git history", "agent state", "local MCP configuration", "unreviewed tests", "eval artifacts", "historical docs"],
             "remaining_gates": ["exact exported artifact build/install/restore verification", "prepared cross-platform matrix execution", "owner approval before publication"],
-            "readme_source": "docs/public-release-guide.md",
+            "readme_source": "README.md",
             "reviewed_tests": list(PUBLIC_TESTS),
             "license_file_present": (ROOT / "LICENSE").is_file(),
             "hygiene_review_categories": categories,

@@ -17,7 +17,16 @@ def test_explicit_hashing_never_probes_model_packages(monkeypatch):
     assert embedder.embed('Lantern review') == embedder.embed('Lantern review')
 
 
-def test_cli_demo_create_and_serve_ignore_ambient_store_and_network(tmp_path, monkeypatch, capsys):
+@pytest.fixture
+def offline_loop():
+    # Windows asyncio creates its local wake-up socket pair when the loop is
+    # initialized. Create that OS mechanism before denying all application IO.
+    with asyncio.Runner() as runner:
+        runner.get_loop()
+        yield runner
+
+
+def test_cli_demo_create_and_serve_ignore_ambient_store_and_network(tmp_path, monkeypatch, capsys, offline_loop):
     target = tmp_path / 'offline demo'
     real = tmp_path / 'real.db'
     real.write_bytes(b'untouched existing user data')
@@ -38,8 +47,8 @@ def test_cli_demo_create_and_serve_ignore_ambient_store_and_network(tmp_path, mo
         from proharness.mcp.profiles import LIBRARY_TOOL_NAMES
         from proharness.mcp.server import build_server
         server = build_server(harness=owner, tool_profile='library')[0]
-        assert {t.name for t in asyncio.run(server.list_tools())} == set(LIBRARY_TOOL_NAMES)
-        response = asyncio.run(server.call_tool('proharness_find', {'query': 'Lantern weekly review schedule'}))
+        assert {t.name for t in offline_loop.run(server.list_tools())} == set(LIBRARY_TOOL_NAMES)
+        response = offline_loop.run(server.call_tool('proharness_find', {'query': 'Lantern weekly review schedule'}))
         assert not response.is_error
         assert 'Tuesday' in str(response.structured_content)
         running.append(owner)

@@ -31,7 +31,7 @@ def harness(store, monkeypatch):
 
 def source(store, tmp_path, text, name="source.txt", **kwargs):
     path = tmp_path / name
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     archive = DocumentArchive(store)
     doc = archive.ingest(str(path), **kwargs)
     row = store._sqlite.execute("SELECT id FROM archive_chunks WHERE document_id=?",

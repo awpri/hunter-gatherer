@@ -118,8 +118,10 @@ def test_one_owned_process_deadline_and_cleanup(monkeypatch):
             if len(waits) == 1:
                 raise subprocess.TimeoutExpired('owned', timeout)
             return 1
+    monkeypatch.setattr(Process, "poll", lambda self: None, raising=False)
+    monkeypatch.setattr(Process, "kill", lambda self: killed.append(self.pid), raising=False)
     monkeypatch.setattr(backend.subprocess, 'Popen', Process)
-    monkeypatch.setattr(backend.os, 'killpg', lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(backend.os, 'killpg', lambda pid, sig: killed.append(pid), raising=False)
     response = backend._worker_render(b'%PDF', 1, 2048, timeout_seconds=0.2, fit_to_byte_limit=True)
     assert response['error_code'] == 'render_timeout'
     assert len(commands) == 1 and commands[0][-1] == 'true'

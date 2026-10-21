@@ -36,11 +36,13 @@ jobs:
           cp scripts/smoke_packaged_demo.py "$RUNNER_TEMP/smoke_packaged_demo.py"
           cd "$RUNNER_TEMP"
           export PAGE_IMAGE_TEST_PYTHON="$smoke_python"
-          "$smoke_python" -m pytest -q -p no:cacheprovider "$RUNNER_TEMP/public-candidate/tests"
+          "$smoke_python" -m pytest -q --tb=short -p no:cacheprovider --junitxml="$RUNNER_TEMP/packaged-tests.xml" "$RUNNER_TEMP/public-candidate/tests"
           "$smoke_python" -I -B smoke_packaged_demo.py --output packaged-demo.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: packaged-demo-${{ matrix.os }}-${{ matrix.python }}
-          path: ${{ runner.temp }}/packaged-demo.json
+          path: |
+            ${{ runner.temp }}/packaged-demo.json
+            ${{ runner.temp }}/packaged-tests.xml
           if-no-files-found: ignore

@@ -5,17 +5,18 @@ these keys. Catalog paths and renderer/source content are untrusted data.
 """
 from __future__ import annotations
 
-from contextlib import closing
 import errno
 import hashlib
 import os
-from pathlib import Path
 import re
 import sqlite3
 import stat
+from contextlib import closing
+from pathlib import Path
 
 from proharness.memory.documents import _archive_schema_ready
 from proharness.memory.library_health import _managed_path, _read_snapshot
+from proharness.memory.secure_files import open_regular
 
 MAX_ORIGINAL_BYTES = 100 * 1024 * 1024
 _NOT_FOUND = "Document not found or excluded."
@@ -79,21 +80,9 @@ def _db_file(db):
 
 def _read_managed(path):
     """Open every ancestor and leaf without following symlinks, then bound reads."""
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-    parent = stream = None
+    stream = None
     try:
-        parent = os.open(path.anchor, flags | os.O_DIRECTORY)
-        for part in path.parts[1:-1]:
-            info = os.stat(part, dir_fd=parent, follow_symlinks=False)
-            if not stat.S_ISDIR(info.st_mode):
-                return error("unsafe_original_path", "Managed original unavailable.")
-            following = os.open(part, flags | os.O_DIRECTORY, dir_fd=parent)
-            os.close(parent)
-            parent = following
-        info = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISREG(info.st_mode):
-            return error("unsafe_original_path", "Managed original unavailable.")
-        stream = os.open(path.name, flags, dir_fd=parent)
+        stream = open_regular(path)
         before = os.fstat(stream)
         if not stat.S_ISREG(before.st_mode):
             return error("unsafe_original_path", "Managed original unavailable.")
@@ -119,8 +108,6 @@ def _read_managed(path):
     finally:
         if stream is not None:
             os.close(stream)
-        if parent is not None:
-            os.close(parent)
 
 
 def reauthorize_document_original(store, document_id, identity, *, include_sensitive=False):

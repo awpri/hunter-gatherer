@@ -486,22 +486,13 @@ class DocumentArchive:
         self.store.assert_embedder_current()
         if expected_content_hash is not None:
             source = Path(path).expanduser().absolute()
-            directory_fd = None
+            from proharness.memory.secure_files import open_regular
+
             file_fd = None
             try:
                 if source.resolve(strict=True) != source:
                     raise ValueError("Document source changed since preview.")
-                # Walk every directory relative to an open descriptor so a
-                # renamed parent or a same-content symlink cannot redirect
-                # the source identity between validation and opening.
-                directory_fd = os.open(source.anchor, os.O_RDONLY | os.O_DIRECTORY)
-                for component in source.parts[1:-1]:
-                    next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                      dir_fd=directory_fd)
-                    os.close(directory_fd)
-                    directory_fd = next_fd
-                file_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
-                                  dir_fd=directory_fd)
+                file_fd = open_regular(source)
                 source_stat = os.fstat(file_fd)
                 if not stat.S_ISREG(source_stat.st_mode):
                     raise ValueError("Document source changed since preview: not a regular file.")
@@ -515,8 +506,6 @@ class DocumentArchive:
             finally:
                 if file_fd is not None:
                     os.close(file_fd)
-                if directory_fd is not None:
-                    os.close(directory_fd)
         else:
             source = Path(path).expanduser().resolve(strict=True)
             if not source.is_file():

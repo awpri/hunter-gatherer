@@ -11,23 +11,16 @@ import time
 import uuid
 from pathlib import Path
 
+from proharness.memory.secure_files import lock_exclusive, open_regular
+
 SUPPORTED = frozenset({".pdf", ".docx", ".pptx", ".md", ".markdown", ".txt"})
 
 
 def _read_source(path, limit):
     """Read a regular file without following any path-component symlink."""
-    directory_fd = file_fd = None
+    file_fd = None
     try:
-        directory_fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
-        for component in path.parts[1:-1]:
-            next_fd = os.open(
-                component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd
-            )
-            os.close(directory_fd)
-            directory_fd = next_fd
-        file_fd = os.open(
-            path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
-        )
+        file_fd = open_regular(path)
         info = os.fstat(file_fd)
         if not stat.S_ISREG(info.st_mode):
             raise ValueError("Source changed during planning.")
@@ -44,8 +37,6 @@ def _read_source(path, limit):
     finally:
         if file_fd is not None:
             os.close(file_fd)
-        if directory_fd is not None:
-            os.close(directory_fd)
 
 
 class ImportJobs:
@@ -55,8 +46,6 @@ class ImportJobs:
 
     @staticmethod
     def preview(paths, recursive=False, max_files=1000, max_bytes=1024**3):
-        if os.name != "posix":
-            raise ValueError("Bulk import planning currently requires macOS or Linux.")
         if not isinstance(recursive, bool):
             raise ValueError("recursive must be a boolean.")
         if isinstance(paths, (str, Path)):
@@ -394,10 +383,6 @@ class ImportJobs:
         return {"jobs": jobs}
 
     def run(self, job_id, batch_size=10, include_sensitive=False, retry_errors=False, resume=False):
-        if os.name != "posix":
-            raise ValueError("Bulk import processing currently requires macOS or Linux.")
-        import fcntl
-
         if (
             type(batch_size) is not int
             or not isinstance(include_sensitive, bool)
@@ -426,10 +411,10 @@ class ImportJobs:
         )
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         processed = []
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        descriptor = open_regular(lock_path.absolute(), writable=True, create=True)
         with os.fdopen(descriptor, "a+b") as lock:
             try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_exclusive(lock)
             except BlockingIOError:
                 raise ValueError("An import batch is already running.") from None
             # The OS releases this claim on process death. All interrupted items

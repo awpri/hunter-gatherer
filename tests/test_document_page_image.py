@@ -1,5 +1,6 @@
 """Model-free original page rendering, privacy, read-only and bounds tests."""
 import hashlib
+import os
 import importlib
 from pathlib import Path
 import sqlite3
@@ -84,7 +85,8 @@ def test_exact_historical_original_newest_privacy_deletion_before_io(store, tmp_
 
 @pytest.mark.parametrize("kind,code", [("corrupt", "original_integrity_failed"), ("escape", "unsafe_original_path"),
                                        ("leaf_symlink", "unsafe_original_path"), ("ancestor_symlink", "unsafe_original_path"),
-                                       ("directory", "unsafe_original_path"), ("fifo", "unsafe_original_path"), ("missing", "original_unavailable")])
+                                       ("directory", "unsafe_original_path"), ("missing", "original_unavailable")]
+                         + ([("fifo", "unsafe_original_path")] if hasattr(os, "mkfifo") else []))
 def test_original_integrity_and_managed_paths(store, tmp_path, kind, code):
     _, identity = ingest(store, tmp_path)
     row = store._sqlite.execute("SELECT original_path FROM archive_documents WHERE id=?", (identity,)).fetchone()
@@ -189,8 +191,10 @@ def test_timeout_and_failure_cleanup(monkeypatch):
                 raise subprocess.TimeoutExpired("owned", timeout)
             return 1
     killed = []
+    monkeypatch.setattr(Process, "poll", lambda self: None, raising=False)
+    monkeypatch.setattr(Process, "kill", lambda self: killed.append(self.pid), raising=False)
     monkeypatch.setattr(backend.subprocess, "Popen", Process)
-    monkeypatch.setattr(backend.os, "killpg", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(backend.os, "killpg", lambda pid, sig: killed.append(pid), raising=False)
     assert_safe_error(backend._worker_render(b"%PDF", 1, 512), "render_timeout")
     assert killed == [919191] and processes[0].calls == 2
     assert all(not p.exists() for p in private_paths)
@@ -280,8 +284,10 @@ def test_worker_cancellation_cleans_owned_group_and_temporary_files(monkeypatch)
             if self.calls == 1:
                 raise KeyboardInterrupt()
             return 1
+    monkeypatch.setattr(Cancelled, "poll", lambda self: None, raising=False)
+    monkeypatch.setattr(Cancelled, "kill", lambda self: killed.append(self.pid), raising=False)
     monkeypatch.setattr(backend.subprocess, "Popen", Cancelled)
-    monkeypatch.setattr(backend.os, "killpg", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(backend.os, "killpg", lambda pid, sig: killed.append(pid), raising=False)
     with pytest.raises(KeyboardInterrupt):
         backend._worker_render(b"%PDF", 1, 512)
     assert killed == [818181] and all(not path.exists() for path in paths)
@@ -471,8 +477,10 @@ def test_cancellation_preserved_even_if_temporary_cleanup_fails(monkeypatch):
                 raise KeyboardInterrupt()
             return 0
     monkeypatch.setattr(backend.tempfile, "TemporaryDirectory", Temporary)
+    monkeypatch.setattr(Process, "poll", lambda self: None, raising=False)
+    monkeypatch.setattr(Process, "kill", lambda self: killed.append(self.pid), raising=False)
     monkeypatch.setattr(backend.subprocess, "Popen", Process)
-    monkeypatch.setattr(backend.os, "killpg", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(backend.os, "killpg", lambda pid, sig: killed.append(pid), raising=False)
     with pytest.raises(KeyboardInterrupt):
         backend._worker_render(b"%PDF", 1, 512)
     assert killed == [717171] and all(not path.exists() for path in paths)

@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem with hunter/gatherer.
+title: "[Bug]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe what you expected and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a small fictional example or the demo question, if relevant.
+      placeholder: |
+        1. Start the fictional demo…
+        2. Ask…
+        3. Open…
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, browser or MCP client, installation method, and commit if known.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Relevant output or screenshots
+      description: Remove credentials, personal paths and private source text before sharing. Do not include details of an exploitable security vulnerability in a public issue.
