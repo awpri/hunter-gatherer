@@ -650,6 +650,8 @@ def cmd_doctor(args, settings: Settings):
         collections = [x.name for x in c.get_collections().collections]
         c.close()
         table.add_row("qdrant", f"[green]reachable[/green] collections={collections}")
+    except ImportError:
+        table.add_row("qdrant", "not installed — add the qdrant extra from your h/g checkout if configured")
     except Exception as e:
         table.add_row("qdrant", f"[yellow]unreachable ({type(e).__name__})[/yellow] — will use in-memory backend")
     # SQLite
@@ -676,7 +678,7 @@ def cmd_doctor(args, settings: Settings):
 
         table.add_row("faster-whisper", "[green]installed[/green]")
     except Exception:
-        table.add_row("faster-whisper", "[dim]not installed (pip install 'proharness[voice]')[/dim]")
+        table.add_row("faster-whisper", "[dim]not installed — optional voice extra from your h/g checkout[/dim]")
     console.print(table)
 
 

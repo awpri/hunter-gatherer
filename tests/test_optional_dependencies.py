@@ -67,6 +67,17 @@ def test_openai_speech_explains_its_own_optional_extra(monkeypatch):
         OpenAITTS(api_key="fictional-test-key").speak("Hello")
 
 
+def test_doctor_does_not_promise_a_fallback_for_missing_qdrant(monkeypatch, tmp_path, capsys):
+    from proharness import cli
+
+    _block_import(monkeypatch, "qdrant_client")
+    monkeypatch.setattr(cli, "get_settings", lambda: Settings(sqlite_path=str(tmp_path / "doctor.db")))
+    assert cli.main(["doctor"]) == 0
+    output = capsys.readouterr().out
+    assert "qdrant extra" in output
+    assert "will use in-memory" not in output
+
+
 def test_demo_and_library_start_without_heavy_dependencies(tmp_path):
     # A new process prevents the test runner's imports/stubs from concealing a
     # transitive dependency on model, cloud SDK, voice, or external vector code.

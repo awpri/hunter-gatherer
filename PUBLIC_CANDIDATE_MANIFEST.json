@@ -951,8 +951,8 @@
     },
     {
       "path": "proharness/cli.py",
-      "bytes": 48932,
-      "sha256": "b92faa87d6bb3b5d3772e60d34e4048762e094471a48e16a71dcd36d58583ec1"
+      "bytes": 49081,
+      "sha256": "ff48ef313694cdc0647afbac74704dbb8593a0191a252b8a51e6d0e906d25b46"
     },
     {
       "path": "proharness/config.py",
@@ -2021,8 +2021,8 @@
     },
     {
       "path": "tests/test_optional_dependencies.py",
-      "bytes": 5567,
-      "sha256": "61150f2094010e30c62ec70d2e117ba915c110c1d02edce48362cc55b84a67c0"
+      "bytes": 6004,
+      "sha256": "543a40073c5c931e15ab7c18a36d094705ccb4cee478ba68965de7a644640c14"
     },
     {
       "path": "tests/test_original_page_collections.py",
