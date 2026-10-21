@@ -22,7 +22,7 @@
   .compact-shell .library-brand {min-height:48px;padding:9px 16px}
   .compact-shell .workspace-navigation {padding:0 10px 7px;gap:3px}
   .compact-shell .navigation-item,.compact-shell .navigation-item.utility-navigation {min-height:32px;padding:6px 10px;gap:6px}
-  .compact-shell .navigation-item.utility-navigation:nth-child(4) {margin-left:auto}
+  .compact-shell .navigation-item.utility-navigation:nth-child(3) {margin-left:auto}
   .compact-shell .workspace-top .top-actions .button span {display:inline}
   .compact-shell .view-title:not(.graph-title-hidden) {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 }

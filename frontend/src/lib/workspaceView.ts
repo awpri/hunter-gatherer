@@ -1,10 +1,10 @@
-export type WorkspaceView = 'connections'|'library'|'review'|'health'|'connection'|'evidence';
+export type WorkspaceView = 'connections'|'library'|'review'|'health'|'connection';
 const KEY='hunter-gatherer.library.view';
-const homeViews:WorkspaceView[]=['evidence','connections','library'];
+const homeViews:WorkspaceView[]=['connections','library'];
 /** Remember the last main workspace; health/review dialogs are not landing pages. */
 export function readWorkspaceView():WorkspaceView {
-  try {const saved=localStorage.getItem(KEY) as WorkspaceView;return homeViews.includes(saved)?saved:'evidence';}
-  catch {return 'evidence';}
+  try {const saved=localStorage.getItem(KEY) as WorkspaceView;return homeViews.includes(saved)?saved:'connections';}
+  catch {return 'connections';}
 }
 export function saveWorkspaceView(view:WorkspaceView) {
   if(homeViews.includes(view))try {localStorage.setItem(KEY,view);} catch { /* Navigation works without storage. */ }

@@ -17,7 +17,11 @@
 @media(max-width:680px){.search-shortcut{display:none}.search-group-chip{max-width:90px}.unified-search-popover{min-width:240px;right:-50px}}
 
 .compact-shell .search-box.unified-search input:focus-visible {box-shadow:none}
-.search-mode {flex-shrink:0;max-width:101px;height:28px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font:inherit;font-size:11px;padding:0 22px 0 0;cursor:pointer}
+.search-mode-control {position:relative;flex-shrink:0;width:46px;border-right:1px solid var(--line);font-size:11px}
+.search-mode-control[data-mode=records] {width:70px}
+.search-mode-control[data-mode=commands] {width:87px}
+.search-mode-control>svg {position:absolute;right:6px;top:50%;transform:translateY(-50%) rotate(90deg);pointer-events:none;color:var(--muted)}
+.search-mode {appearance:none;width:100%;min-width:0;height:28px;border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;padding:0 19px 0 0;cursor:pointer}
 .search-mode option {background:var(--panel);color:var(--ink)}
 .unified-search-empty {padding:12px 9px;margin:0;color:var(--muted);font-size:12px;line-height:1.5}
-@media(max-width:680px){.compact-shell .workspace-top .search-box.unified-search{padding-left:8px}.search-mode{max-width:90px}.unified-search-popover{min-width:0;right:0;width:max(100%,240px);max-width:calc(100vw - 24px)}}
+@media(max-width:680px){.compact-shell .workspace-top .search-box.unified-search{padding-left:8px}.unified-search-popover{min-width:0;right:0;width:max(100%,240px);max-width:calc(100vw - 24px)}}

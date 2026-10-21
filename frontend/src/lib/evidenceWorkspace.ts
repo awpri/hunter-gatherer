@@ -91,44 +91,51 @@ export function packetContextReferences(packet:EvidencePacket):CollectionReferen
  return uniqueReferences([...passages,...memories]);
 }
 export function passageLocation(passage:SourcePassage):string {
- return [passage.location?.page?`Page ${passage.location.page}`:'',passage.location?.section||'',passage.version?`Version ${passage.version}${passage.is_latest===false?' · Historical':''}`:''].filter(Boolean).join(' · ');
+ const section=passage.location?.section||'';
+ const namedVersion=passage.version&&new RegExp(`\\b(?:version|v)\\s*${passage.version}\\b`,'i').test(`${section} ${passage.title||''}`);
+ return [passage.location?.page?`Page ${passage.location.page}`:'',section===passage.title?'':section,passage.version&&!namedVersion?`Version ${passage.version}`:'',passage.is_latest===false?'Historical':''].filter(Boolean).join(' · ');
 }
 
 
 /** A display window into the original text, not a summary or retrieval policy. */
-export function passageExcerpt(quote:string,query:string):{text:string;leading:boolean;trailing:boolean;clipped:boolean} {
+export function passageExcerpt(quote:string,query:string):{text:string;leading:boolean;trailing:boolean;clipped:boolean;focusStart?:number;focusEnd?:number} {
  const full={text:quote,leading:false,trailing:false,clipped:false};
- if(quote.length<=600)return full;
+ if(quote.length<=140)return full;
  const stop=new Set('the and for that this with from what when where which who whom whose why how was were are does did has have had can could would should about into than then there their they them these those your you our its any all more find show tell give please looking need know'.split(' '));
  const terms=new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(term=>!stop.has(term)));
  if(!terms.size)return full;
- const units:{start:number;end:number;score:number}[]=[];
- // Keep sentence punctuation and line boundaries; offsets always refer to the raw source.
- const boundaries=[...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\n+/gu)].map(match=>match.index!+match[0].length);
+ const units:{start:number;end:number;score:number;matches:string[];structural:boolean}[]=[];
+ // Keep complete sentences and paragraphs; soft line wraps must not split meaning.
+ // Offsets always refer to the raw source, including its original whitespace.
+ const boundaries=[...new Set([...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\n{2,}/gu),...quote.matchAll(/^#{1,6}[^\n]*(?:\n|$)/gm)].map(match=>match.index!+match[0].length))].sort((a,b)=>a-b);
  if(boundaries.at(-1)!==quote.length)boundaries.push(quote.length);
  let start=0;
  for(const end of boundaries){
   const text=quote.slice(start,end);
   if(text.trim()){
    const words=new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);
-   const matches=[...terms].filter(term=>words.has(term)).length;
-   units.push({start,end,score:matches*(/^\s*#{1,6}\s/.test(text)?0.25:1)});
+   const matches=[...terms].filter(term=>words.has(term));
+   const structural=/^\s*#{1,6}\s/.test(text)||/^\s*(?:date|author|title|version)\s*:[^\n]*\s*$/i.test(text);
+   units.push({start,end,score:0,matches,structural});
   }
   start=end;
  }
+ // Repeated subject names identify the document; rarer question terms identify
+ // the sentence to read. Heading matches alone must not displace source prose.
+ const frequency=new Map([...terms].map(term=>[term,units.filter(unit=>unit.matches.includes(term)).length]));
+ const bodyMatches=units.some(unit=>!unit.structural&&unit.matches.length>0);
+ for(const unit of units){unit.score=unit.structural&&bodyMatches?0:unit.matches.reduce((score,term)=>score+1/(frequency.get(term)||1),0);}
  const best=units.reduce((selected,unit,index)=>unit.score>(units[selected]?.score||0)?index:selected,-1);
  if(best<0)return full;
- // Both adjacent sentences stay attached, including qualifications and negations.
- let first=Math.max(0,best-1),last=Math.min(units.length-1,best+1);
- while(units[last].end-units[first].start<420){
-  const before=first>0&&units[last].end-units[first-1].start<=600;
-  const after=last<units.length-1&&units[last+1].end-units[first].start<=600;
-  if(after)last++;else if(before)first--;else break;
- }
- // Never cut a sentence merely to force a character limit.
+ // Keep immediate context, including qualifications and negations, without padding
+ // a short matching sentence with unrelated archive prose just to fill the card.
+ const first=Math.max(0,best-1),last=Math.min(units.length-1,best+1);
  let from=units[first].start,to=units[last].end;
  while(from<to&&/\s/.test(quote[from]))from++;
  while(to>from&&/\s/.test(quote[to-1]))to--;
+ let focusFrom=units[best].start,focusTo=units[best].end;
+ while(focusFrom<focusTo&&/\s/.test(quote[focusFrom]))focusFrom++;
+ while(focusTo>focusFrom&&/\s/.test(quote[focusTo-1]))focusTo--;
  const leading=!!quote.slice(0,from).trim(),trailing=!!quote.slice(to).trim();
- return leading||trailing?{text:quote.slice(from,to),leading,trailing,clipped:true}:full;
+ return {text:quote.slice(from,to),leading,trailing,clipped:leading||trailing,focusStart:focusFrom-from,focusEnd:focusTo-from};
 }

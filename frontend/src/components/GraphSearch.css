@@ -1,0 +1,25 @@
+/* Asking changes the graph's companion panel, not its route or camera key. */
+.graph-surface {position:relative;flex:1;min-width:0;min-height:0;overflow:hidden}
+.graph-surface-map {height:100%}
+.graph-is-preview .cm-header,.graph-is-preview .cm-controls,.graph-is-preview .cm-legend {display:none}
+.graph-preview-expand {position:absolute;inset:0;width:100%;border:0;background:transparent;display:flex;align-items:flex-end;justify-content:flex-end;padding:10px 14px;cursor:pointer}
+.graph-preview-expand>span {display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);font-size:11px}
+.graph-preview-expand:hover>span {background:var(--soft)}
+.graph-preview-expand:focus-visible {outline:2px solid var(--accent);outline-offset:-3px}
+.view-connections:has(>.graph-search-results:not([hidden])) {display:grid;grid-template-columns:minmax(220px,1fr) minmax(360px,52%)}
+.graph-search-results {min-width:0;min-height:0;overflow:auto;border-left:1px solid var(--line);background:var(--paper);scrollbar-gutter:stable}
+.graph-search-results[hidden] {display:none}
+.graph-results-navigation {position:sticky;top:0;z-index:6;display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:37px;padding:4px 18px;border-bottom:1px solid var(--line);background:var(--paper)}
+.graph-results-navigation>.text-button {display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.graph-results-navigation>.text-button:hover {color:var(--ink)}
+.graph-results-navigation>.icon-button {min-width:28px;min-height:28px}
+.graph-search-results>.evidence-workspace {width:100%;box-sizing:border-box}
+.graph-quotes-return {position:absolute;bottom:18px;right:18px;z-index:5;display:flex;align-items:center;gap:7px;background:var(--panel);box-shadow:0 2px 12px #0001}
+@media(max-width:680px) {
+  .view-connections:has(>.graph-search-results:not([hidden])) {grid-template-columns:minmax(0,1fr);grid-template-rows:112px minmax(0,1fr)}
+  .graph-search-results {border-left:0;border-top:1px solid var(--line)}
+}
+@media(min-width:681px) {
+  .has-selection>.view-connections:has(>.graph-search-results:not([hidden])) {grid-template-columns:minmax(0,1fr);grid-template-rows:112px minmax(0,1fr)}
+  .has-selection .graph-search-results {border-left:0;border-top:1px solid var(--line)}
+}

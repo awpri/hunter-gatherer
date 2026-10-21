@@ -77,8 +77,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5987,
-      "sha256": "f60f78f8723eb0d883a782e6031706a72cbe74b3fe1ceacacd12310b8f608cb4"
+      "bytes": 7840,
+      "sha256": "8bb28baab41fb857d41636e090481c6f803404eb9751ac98e28fb1fc090a913b"
     },
     {
       "path": "docs/demo.md",
@@ -87,8 +87,8 @@
     },
     {
       "path": "docs/public-release-guide.md",
-      "bytes": 5983,
-      "sha256": "738bb8258f08a5f5553171cd95f65ca0d4c9ce40457a34a483a37dd7215cf3a2"
+      "bytes": 7836,
+      "sha256": "8d70e1ee158b6944d5c48fc5b05bdaed1aadf13135a903460083a8c871177a19"
     },
     {
       "path": "docs/release-provenance-20261014.md",
@@ -122,13 +122,13 @@
     },
     {
       "path": "frontend/public/brand/hg-compact.svg",
-      "bytes": 2938,
-      "sha256": "0c6c340a0c930b0edc4f05201a90c4883a7fe1ad42b18ea31e72b8ee55a3963a"
+      "bytes": 2867,
+      "sha256": "a039090a499d2453899b4f8d8788f8fbf026c66f471f279c5a6e06200f3c1b5a"
     },
     {
       "path": "frontend/public/brand/hunter-gatherer-lockup.svg",
-      "bytes": 10667,
-      "sha256": "c98c55366e9a301cbc6d86f1b9d5889100a6bc7bc9cdb98e1c9015223900f40c"
+      "bytes": 10563,
+      "sha256": "3de6a2f132bdeb1a1beb5818c20f0692d1a8392d498892fe99afbf980d98f97b"
     },
     {
       "path": "frontend/public/fonts/Geist-Variable.woff2",
@@ -147,8 +147,8 @@
     },
     {
       "path": "frontend/public/hunter-gatherer.svg",
-      "bytes": 526,
-      "sha256": "cb530404471831e356c497cc3623ccd85a89687501de153454ee83ce5b3b0689"
+      "bytes": 2580,
+      "sha256": "37d87069cea0aa613328abfc3cdcfad4887dca7073e0cf402e6ad54a5a509cb7"
     },
     {
       "path": "frontend/public/licenses/Lucide-LICENSE.txt",
@@ -162,8 +162,8 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "bytes": 35131,
-      "sha256": "3be8c4cefb071816b1e85f89273ee0e2a6de28ecfbf6ca2d0f0db4ba750c4f6d"
+      "bytes": 37669,
+      "sha256": "6e345958636e0465251bd3aa54306fdb04e5b76b337d4909bbf490c9f344f5eb"
     },
     {
       "path": "frontend/src/components/AppearancePanel.css",
@@ -251,19 +251,24 @@
       "sha256": "4fc5667475839b3b8fae31272b11aeac14ff1563551de5de1101983a22d56682"
     },
     {
+      "path": "frontend/src/components/GraphSearch.css",
+      "bytes": 2371,
+      "sha256": "c79ea0e3ce89451b428cfb969565a5b10fd52fd652d8349f84a7975388ea8c34"
+    },
+    {
       "path": "frontend/src/components/GroupAliases.tsx",
       "bytes": 4975,
       "sha256": "b3ad3f04de99b6ee26962fb05ad3a18c1bceb5b1f5b151d4d5a57f5817763c27"
     },
     {
       "path": "frontend/src/components/HunterGathererMark.tsx",
-      "bytes": 13801,
-      "sha256": "e48b9c94b133e6460752d9a0624e241da6a4d74c9d92b552c0f0c45cb98d9f82"
+      "bytes": 13054,
+      "sha256": "d696da29c62d3e5e7605e5c088a842cf29243495e1e7b7794b2a326a0cf3324e"
     },
     {
       "path": "frontend/src/components/Identity.css",
-      "bytes": 2033,
-      "sha256": "a74d8b00893db5e57f3fb7c24643ebe95bc593ff9d01b9c8eda810ed9306ef7a"
+      "bytes": 1967,
+      "sha256": "a5544616da2a63c1819f8a841bce620e7fed28adca7c6b356ac4a40fbc673433"
     },
     {
       "path": "frontend/src/components/InteractionPolish.css",
@@ -302,18 +307,18 @@
     },
     {
       "path": "frontend/src/components/UnifiedSearch.css",
-      "bytes": 2654,
-      "sha256": "ccb8d0f12557953b2e86aa6d0c0a718225d7d983b99daf885e1c4dbe5bb4882c"
+      "bytes": 2951,
+      "sha256": "faa2ab30f547974de01487907af9ea74fa254f44b1a1cd520867d1ba7ff84a42"
     },
     {
       "path": "frontend/src/components/UnifiedSearch.test.tsx",
-      "bytes": 3672,
-      "sha256": "5c99109f3121368370a9f8dadb83de77b6f3c56c74aad954970c3d4784e40516"
+      "bytes": 5077,
+      "sha256": "b42da90e83eadfb59bf804b892a9b3487367051a30626f82d59f15d243b698f5"
     },
     {
       "path": "frontend/src/components/UnifiedSearch.tsx",
-      "bytes": 5765,
-      "sha256": "16edafe57e3881d2fbe334df3722041442a96868817fb9f2c19d8d3ca21deb38"
+      "bytes": 6028,
+      "sha256": "134999920c4c45128f7a201bde639718b74fd15cb23c372b3690a8d3de1bbcb2"
     },
     {
       "path": "frontend/src/components/VisualPicker.tsx",
@@ -328,7 +333,7 @@
     {
       "path": "frontend/src/components/WorkspaceCompact.css",
       "bytes": 3541,
-      "sha256": "5a741fc3478dc77d2cbf6bb9805dc3491715bdc40763de2a7fa48929688cc897"
+      "sha256": "7f55528df66169c3dc5b1003173be8a63a6398ed2cd71aed38b15c6a27952610"
     },
     {
       "path": "frontend/src/components/connectionFlowModel.test.ts",
@@ -552,13 +557,13 @@
     },
     {
       "path": "frontend/src/lib/evidenceWorkspace.test.ts",
-      "bytes": 11814,
-      "sha256": "f56dbadd145a913768f6dc858b2a51eefec95f59cad512dca35ed4d5f3c39d0c"
+      "bytes": 14265,
+      "sha256": "17befe768ab1f0648f72ab9976eabdd977ac0c97208cc06de4b863d246af09e1"
     },
     {
       "path": "frontend/src/lib/evidenceWorkspace.ts",
-      "bytes": 17443,
-      "sha256": "a0a04815dcf88601d72249babb7f1a5c0a51a6f1f6f3b4ac508289323b966445"
+      "bytes": 18438,
+      "sha256": "02d557301fcc59267523a35a145a087a883336cb26de5ad383e44d2980d75ec4"
     },
     {
       "path": "frontend/src/lib/fileTypes.test.ts",
@@ -667,13 +672,13 @@
     },
     {
       "path": "frontend/src/lib/workspaceView.test.ts",
-      "bytes": 1490,
-      "sha256": "193c38d023d3709409e0bbc1e3c45e07d0b86c1c1f49ae59ef363e7ba9832232"
+      "bytes": 1569,
+      "sha256": "dbae7483c63311232abc7eaea3821aa105ae50f4c20395c105de9d57dfb6e3f4"
     },
     {
       "path": "frontend/src/lib/workspaceView.ts",
-      "bytes": 937,
-      "sha256": "09b0c189ce14cfd1a8bf9628e0bb3a05d2407c57ec17318e58f9dd33f61bf1d4"
+      "bytes": 921,
+      "sha256": "26b9209dda9a6cd1e2e5f9149c9f7c3c90002f18bdadb3227c75fb30f0883282"
     },
     {
       "path": "frontend/src/lib/ws.ts",
@@ -702,18 +707,18 @@
     },
     {
       "path": "frontend/src/views/EvidenceWorkspace.css",
-      "bytes": 11458,
-      "sha256": "db57bf6299f01ee84eae936f75dcc929d6c06922d858fadea4158cd760f8a44f"
+      "bytes": 16033,
+      "sha256": "dae3f5bdd9b33e7f38be7dcd7487091acc57f07068d24a57d7a5220649d6beb1"
     },
     {
       "path": "frontend/src/views/EvidenceWorkspace.test.tsx",
-      "bytes": 40244,
-      "sha256": "69186011016d72c25c741ec5b836ba7ccc7e923c5d0818c40d91fdf17aa6436a"
+      "bytes": 42995,
+      "sha256": "d91e840517911e2e77ff727c5c0b56e36dd7b18dd498a0d2362280d25fb8a587"
     },
     {
       "path": "frontend/src/views/EvidenceWorkspace.tsx",
-      "bytes": 43159,
-      "sha256": "b9cf86530cf1b7338395b271987d619d922282be9e5ddf5051f1e5e3197e4953"
+      "bytes": 46725,
+      "sha256": "0af712770f4c811a8fa54ec1d3551ef9b3d2e1376041767ddb9ad37faeaf9283"
     },
     {
       "path": "frontend/src/views/LibraryForms.tsx",
@@ -1586,24 +1591,24 @@
       "sha256": "f03e5cdcee48063e11dfd47e022f73393dc49cce35a8ce4166a3a7a41f0cc82f"
     },
     {
-      "path": "proharness/server/library_static/assets/index-DOBKKEw4.css",
-      "bytes": 113831,
-      "sha256": "da73bcf58c9e537983079955835fa2ca1862ce19d8af3a68b2bb4811d898fe44"
+      "path": "proharness/server/library_static/assets/index-CKqufVYw.js",
+      "bytes": 419476,
+      "sha256": "ef514e90c0d769e45797281ffe5e08154f25b3a1a3dcd32af1bbf5eb1dc4873d"
     },
     {
-      "path": "proharness/server/library_static/assets/index-Dq4z-G1C.js",
-      "bytes": 415292,
-      "sha256": "c9a74c190864fcf3a9ae51abe672b3a281d19b17a230faf3be4815088ecc403b"
+      "path": "proharness/server/library_static/assets/index-DUTwrGx9.css",
+      "bytes": 120808,
+      "sha256": "28a42d1a6a657949ff24d6c412418aa32cae57e898d9e49b0e38b36a5bcbd4dd"
     },
     {
       "path": "proharness/server/library_static/brand/hg-compact.svg",
-      "bytes": 2938,
-      "sha256": "0c6c340a0c930b0edc4f05201a90c4883a7fe1ad42b18ea31e72b8ee55a3963a"
+      "bytes": 2867,
+      "sha256": "a039090a499d2453899b4f8d8788f8fbf026c66f471f279c5a6e06200f3c1b5a"
     },
     {
       "path": "proharness/server/library_static/brand/hunter-gatherer-lockup.svg",
-      "bytes": 10667,
-      "sha256": "c98c55366e9a301cbc6d86f1b9d5889100a6bc7bc9cdb98e1c9015223900f40c"
+      "bytes": 10563,
+      "sha256": "3de6a2f132bdeb1a1beb5818c20f0692d1a8392d498892fe99afbf980d98f97b"
     },
     {
       "path": "proharness/server/library_static/fonts/Geist-Variable.woff2",
@@ -1622,13 +1627,13 @@
     },
     {
       "path": "proharness/server/library_static/hunter-gatherer.svg",
-      "bytes": 526,
-      "sha256": "cb530404471831e356c497cc3623ccd85a89687501de153454ee83ce5b3b0689"
+      "bytes": 2580,
+      "sha256": "37d87069cea0aa613328abfc3cdcfad4887dca7073e0cf402e6ad54a5a509cb7"
     },
     {
       "path": "proharness/server/library_static/index.html",
       "bytes": 2093,
-      "sha256": "fa56fa61f12a9253a7452653e1a45994d84a764e7c28c8e14764897629cf410b"
+      "sha256": "f169727f6254b800415c632be930954d2369d92b4788346699e29e43ab584db0"
     },
     {
       "path": "proharness/server/library_static/licenses/Lucide-LICENSE.txt",

@@ -34,10 +34,38 @@ a semantic retrieval quality benchmark.
 
 Try: **What is the Lantern pilot's weekly review schedule?**
 
-Ask one clear question with its subject. Additional questions are optional; they
-look for different details, rather than imposing filters every source must match.
-Use **Copy cited context** to hand inspected sources to your assistant. Collections
-are optional and save references, notes, review decisions and unresolved questions.
+Graph is the home workspace. Choose **Ask** in its search bar and enter one clear
+question with its subject. Quotes open alongside the graph; closing them returns
+to the same graph position. **Records** searches library entries, and **Commands**
+finds actions. Additional questions are optional; they look for different details,
+rather than imposing filters every source must match.
+
+Open a source title to read the original. Expand a quote to see the surrounding
+passage. Copy quotations with their citations for your assistant, or select
+sources to save a collection with notes, review decisions and unresolved questions.
+
+### About search results
+
+- **Are these generated answers?** No. Quotes are exact excerpts from your files;
+  saved memories are records in your library. A highlighted sentence matches your
+  question's wording, but the highlight does not verify its claim. Read the full
+  passage for context, qualifications and dates.
+- **What gets copied?** The copy action uses the loaded source passages and saved
+  memories, with their citations. When you choose to copy a selection, it uses only
+  selected sources from those results. File titles, connection hints and generated
+  annotations are not quotations and are not included as source text. Sources are
+  checked again for current access; any withheld or omitted text is reported.
+- **Do I need a collection?** No. Collections save references and your own review
+  notes for later. A writing example is a source you want an assistant to use as
+  a reference for tone or style; it is separate from evidence for a factual claim.
+- **Why are there related files or records?** A title, saved connection or derived
+  annotation can help you find a source even when no matching quotation was
+  returned. Open it to inspect the actual content. A connection is not independent
+  corroboration.
+- **Does an empty result mean the information is absent?** No. Each search has a
+  delivery limit. Load more results when offered, try another question, or inspect
+  the library directly. Missing text can also reflect extraction or access limits.
+  Result details retain the search diagnostics for investigating these cases.
 
 This is developed separately from ProHarness. Internal Python module, command and
 MCP names remain `proharness` for compatibility. Do not install both projects in

@@ -15,10 +15,9 @@ code,kbd,pre,.mono,.connection-code{font-family:var(--font-mono)}
 [data-motion='reduced'] .proharness-mark{animation:none;transition:none}
 [data-motion='reduced'] .brand-mark:hover .proharness-mark{transform:none}
 
-/* Original wordmark geometry follows the user's chosen theme without film effects. */
+/* Crisp, compact product identity; the arrow follows the chosen accent. */
 .library-brand .brand-mark{color:var(--ink);border-radius:4px}
 .hg-wordmark{display:block;flex-shrink:0;height:auto;overflow:visible}
-.hg-wordmark-full{width:180px;max-width:100%}
-.hg-wordmark-compact{display:none;width:66px;height:42px}
-@media(max-width:1000px){.hg-wordmark-full{width:200px}}
+.hg-wordmark-full{width:160px;max-width:100%}
+.hg-wordmark-compact{display:none;width:36.4px;height:24px}
 @media(max-width:360px){.hg-wordmark-full{display:none}.hg-wordmark-compact{display:block}}

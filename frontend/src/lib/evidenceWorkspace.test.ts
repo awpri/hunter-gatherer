@@ -1,4 +1,8 @@
-import {findPacket,appendFindPage,findResultsHeading,packetContextReferences,passageExcerpt} from './evidenceWorkspace';
+// @ts-expect-error Vite raw source import uses the actual standalone demo fixture.
+import pilotReview from '../../../proharness/demo_data/pilot-review.md?raw';
+// @ts-expect-error Vite raw source import uses the actual standalone demo fixture.
+import pilotPlan from '../../../proharness/demo_data/pilot-plan-v2.md?raw';
+import {findPacket,appendFindPage,findResultsHeading,packetContextReferences,passageExcerpt,passageLocation} from './evidenceWorkspace';
 import {describe,it,expect} from 'vitest';
 import {assessmentLabel,citationReference,retrievalPathReference,collectionBody,normalizeRequirements,referenceCitation,reviewsForReferences,updateCollectionReview,uniqueReferences,type Collection} from './evidenceWorkspace';
 describe('Evidence workspace boundaries',()=>{
@@ -85,5 +89,34 @@ describe('Display-only source excerpts',()=>{
  it('keeps short text and unmatched long sources intact instead of inventing a relevant excerpt',()=>{
   expect(passageExcerpt('It was not approved.','approved').text).toBe('It was not approved.');
   const quote='Unrelated archival wording. '.repeat(40);expect(passageExcerpt(quote,'bag design')).toEqual({text:quote,leading:false,trailing:false,clipped:false});
+ });
+});
+
+
+describe('Compact source result presentation',()=>{
+ it('focuses a short document on the matching sentence without title/disclaimer noise',()=>{
+  const quote=pilotPlan as string;
+  const result=passageExcerpt(quote,"What is the Lantern pilot's weekly review schedule?");
+  expect(result.clipped).toBe(true);expect(result.text.length).toBeLessThan(240);expect(result.text).not.toContain('Fictional source');
+  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('The weekly review remains Tuesday at 10:00 UTC.');
+  expect(quote).toContain(result.text);
+  const owner=passageExcerpt(quote,'Who is the Lantern pilot owner?');
+  expect(owner.text).toContain('Lantern pilot owner,\neffective 2030-04-08.');
+ });
+ it('prefers a matching body sentence over a heading containing repeated subject terms',()=>{
+  const result=passageExcerpt(pilotReview as string,"What is the Lantern pilot's weekly review schedule?");
+  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('Rowan Finch held the Tuesday review.');
+  expect(result.text).not.toContain('# Lantern');expect(pilotReview).toContain(result.text);
+ });
+ it('does not focus standalone date metadata when the body answers the question',()=>{
+  const source='# Pilot review\nDate: Tuesday review\n\n'+('Archival context. '.repeat(8))+'The Tuesday review starts at 10:00 UTC. The schedule may change.';
+  const result=passageExcerpt(source,'Tuesday review');
+  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('The Tuesday review starts at 10:00 UTC.');
+ });
+ it('does not repeat a version named in a source title or section, but keeps historical status',()=>{
+  const source={document_id:'d',chunk_id:'c',citation:'[doc:d#c]',quote:'Exact wording',title:'Lantern pilot plan — version 2',version:2,location:{section:'Lantern pilot plan — version 2'}};
+  expect(passageLocation(source)).toBe('');
+  expect(passageLocation({...source,is_latest:false})).toBe('Historical');
+  expect(passageLocation({...source,title:'Pilot plan',location:{page:3,section:'Schedule'}})).toBe('Page 3 · Schedule · Version 2');
  });
 });

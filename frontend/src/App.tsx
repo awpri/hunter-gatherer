@@ -28,11 +28,11 @@ import { LibraryHealth } from './views/LibraryHealth';
 import { LibraryLoading } from './components/LibraryLoading';
 import './components/LibraryPolish.css';
 import './components/WorkspaceCompact.css';
+import './components/GraphSearch.css';
 import {healthLabel, readHealthSummary, saveHealthSummary, summarizeHealth, type HealthSummary} from './lib/healthStatus';
 
 type View = WorkspaceView;
 const NAV: {id: View; label: string; icon: string}[] = [
-  {id:'evidence', label:'Ask', icon:'knowledge'},
   {id:'connections', label:'Graph', icon:'connections'}, {id:'library', label:'Library', icon:'library'},
   {id:'review', label:'Review', icon:'review'}, {id:'health', label:'Health', icon:'health'}, {id:'connection', label:'Connection', icon:'settings'},
 ];
@@ -57,14 +57,18 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   const [tab, setTab] = useState<LibraryTab>('memories');
   const [query, setQuery] = useState(''); const [search, setSearch] = useState('');
   const [askQuery,setAskQuery]=useState(''); const [commandQuery,setCommandQuery]=useState('');
-  const [searchMode,setSearchMode]=useState<SearchMode>(()=>readWorkspaceView()==='evidence'?'ask':'records');
+  const [searchMode,setSearchMode]=useState<SearchMode>(()=>readWorkspaceView()==='connections'?'ask':'records');
   const searchQuery=searchMode==='ask'?askQuery:searchMode==='commands'?commandQuery:query;
-  function changeSearchQuery(text:string){if(searchMode==='ask')setAskQuery(text);else if(searchMode==='commands')setCommandQuery(text);else{setQuery(text);if(!text){setSearch('');setOffset(0);}}}
+  function changeSearchQuery(text:string){if(searchMode==='ask'){setAskQuery(text);if(!text.trim())setAskResultsOpen(false);}else if(searchMode==='commands')setCommandQuery(text);else{setQuery(text);if(!text){setSearch('');setOffset(0);}}}
   const [kind, setKind] = useState(''); const [group, setGroup] = useState(''); const [pinned, setPinned] = useState(false);
   const [offset, setOffset] = useState(0); const [page, setPage] = useState<Page<LibraryMemory> | Page<LibraryDocument> | null>(null);
   const [graph, setGraph] = useState<LibraryGraph | null>(null); const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [reviewSource,setReviewSource]=useState('');
   const [evidenceSeed,setEvidenceSeed] = useState({query:'',token:0});
+  const [askResultsOpen,setAskResultsOpen] = useState(false);
+  const [compactGraph,setCompactGraph] = useState(()=>matchMedia('(max-width:680px)').matches);
+  const graphSurfaceRef=useRef<HTMLDivElement>(null);
+  const quotesRef=useRef<HTMLDivElement>(null);
   const [selectedOriginalPage,setSelectedOriginalPage]=useState<OriginalPageSelection|null>(null);
   const [collectionBusy,setCollectionBusy]=useState(false);
   function selectOriginalPage(reference:import('./lib/pageImages').OriginalPageReference,doc:LibraryDocument){
@@ -75,7 +79,9 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   const [history,setHistory] = useState<Selection[]>([]);
   function openSelection(next:Selection){setHistory(previous=>selection?[...previous,{...selection,scroll:(document.querySelector('.inspector') as HTMLElement|null)?.scrollTop||0}].slice(-30):previous);setSelection(next);}
   function goBack(){const previous=history[history.length-1];if(previous){setHistory(history.slice(0,-1));setSelection(previous);}}
-  function gatherEvidence(text:string){setAskQuery(text);setSearchMode('ask');setEvidenceSeed(previous=>({query:text,token:previous.token+1}));setSelection(null);setHistory([]);setSelectedNode(null);setView('evidence');}
+  function gatherEvidence(text:string){setAskQuery(text);setSearchMode('ask');setView('connections');if(!text.trim()){searchInput.current?.focus();return;}setEvidenceSeed(previous=>({query:text,token:previous.token+1}));setAskResultsOpen(true);setSelection(null);setHistory([]);requestAnimationFrame(()=>quotesRef.current?.focus());}
+  function closeAskResults(){setAskResultsOpen(false);setSelection(null);setHistory([]);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.graph-quotes-return')?.focus());}
+  function changeSearchMode(mode:SearchMode){setSearchMode(mode);if(mode!=='ask')setAskResultsOpen(false);}
   const [selection, setSelection] = useState<Selection | null>(null); const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [overviewError, setOverviewError] = useState('');
   const [form, setForm] = useState<'memory' | 'file' | null>(null); const [notice, setNotice] = useState('');
@@ -91,7 +97,7 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   const contentRef=useRef<HTMLElement>(null);
   const refreshActivity = useCallback(() => setRevision(value => value + 1), []);
   const {activity, status: activityStatus, connected: activityConnected} = useLibraryActivity(includePrivate, refreshActivity);
-  const {focusRequest,onUserNavigate} = useAgentFollow(activity.focus,view==='connections'&&!!board&&board.follow_agent&&!form&&!appearanceOpen&&!boardEditorOpen,(graph?.nodes||[]).map(node=>node.id));
+  const {focusRequest,onUserNavigate} = useAgentFollow(activity.focus,view==='connections'&&!askResultsOpen&&!!board&&board.follow_agent&&!form&&!appearanceOpen&&!boardEditorOpen,(graph?.nodes||[]).map(node=>node.id));
   const cameraKey=JSON.stringify([search,kind,group,pinned,includePrivate,board?.layout,board?.grouping,board?.groups]);
   const scrollKey=JSON.stringify([view,tab,search,kind,group,pinned,offset,recordLayout]);
   useLayoutEffect(()=>{if(contentRef.current&&!loading)contentRef.current.scrollTop=positions.current.scroll(scrollKey);},[scrollKey,loading,page]);
@@ -149,12 +155,12 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   const closeForm = useCallback(() => setForm(null), []);
   const changed = useCallback((message: string) => {setNotice(message); setOffset(0); setRevision(v => v+1); setForm(null);setSelection(null);setHistory([]);setSelectedNode(null);}, []);
   function navigate(next: View) {
-    if(next==='evidence')setSearchMode('ask');else if(next==='connections'||next==='library')setSearchMode('records');
+    if(next==='connections')setSearchMode('ask');else if(next==='library')setSearchMode('records');
+    setAskResultsOpen(false);
     if(next==='review')setReviewSource('');
-    if (next === 'connections') {setKind(''); setPinned(false);}
     const continuing=(view==='connections'||view==='library')&&(next==='connections'||next==='library')&&tab!=='collections'&&tab!=='imports';setView(next);if(!continuing){setSelection(null);setHistory([]);setSelectedNode(null);}
   }
-  function chooseGroup(id: string) {setGroup(id); setOffset(0); setSelection(null); setSelectedNode(null); if (!browsing) navigate('connections');}
+  function chooseGroup(id: string) {setAskResultsOpen(false);setGroup(id); setOffset(0); setSelection(null); setSelectedNode(null); if (!browsing) navigate('connections');}
   function chooseNode(node: GraphNode) {setSelectedNode(node); if(node.type !== 'topic')openSelection({type: node.type, id: node.record_id});else setSelection(null);}
   function boardChanged(next:BoardSettings) {setBoard(next);setRevision(value=>value+1);}
   const editableBoardGroups = useMemo<BoardGroupOption[]>(() => {
@@ -178,14 +184,17 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   const memories = page?.memories as LibraryMemory[] | undefined;
   const documents = page?.documents as LibraryDocument[] | undefined;
   const activeGroup = groups?.groups.find(item => item.id === group);
-  const hasInspector = !!selection || selectedNode?.type === 'topic';
-  const title = view==='evidence'?'Ask library':NAV.find(item => item.id === view)?.label;
+  const hasInspector = !!selection || (!askResultsOpen && selectedNode?.type === 'topic');
+  const graphPreview = askResultsOpen && (compactGraph || hasInspector);
+  useEffect(()=>{const media=matchMedia('(max-width:680px)');const update=()=>setCompactGraph(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
+  useLayoutEffect(()=>{if(graphSurfaceRef.current)graphSurfaceRef.current.inert=graphPreview;},[graphPreview,graph]);
+  const title = NAV.find(item => item.id === view)?.label;
   const groupOf = (id?: string) => groups?.groups.find(item => item.id === id);
   const commands: SearchCommand[] = [
-    {id:'gather-evidence',label:'Ask library',description:'Find quotations and inspect their sources',section:'Library',icon:<Icon name="knowledge"/>,keywords:['sources','requirements','research','gather','evidence'],onSelect:()=>navigate('evidence')},
+    {id:'gather-evidence',label:'Ask library',description:'Find quotations and inspect their sources',section:'Library',icon:<Icon name="knowledge"/>,keywords:['sources','requirements','research','gather','evidence'],onSelect:()=>{navigate('connections');requestAnimationFrame(()=>searchInput.current?.focus());}},
     {id:'imports',label:'Import jobs',section:'Library',icon:<Icon name="upload"/>,keywords:['background','retry','resume'],onSelect:()=>{navigate('library');setTab('imports');}},
     {id:'collections',label:'Collections',section:'Library',icon:<Icon name="project"/>,keywords:['portfolio','application','export'],onSelect:()=>{navigate('library');setTab('collections');}},
-    ...NAV.filter(item=>item.id!=='evidence').map(item => ({id: `view-${item.id}`, label: item.label, section: 'Navigate', icon: <Icon name={item.icon}/>, onSelect: () => navigate(item.id)})),
+    ...NAV.map(item => ({id: `view-${item.id}`, label: item.label, section: 'Navigate', icon: <Icon name={item.icon}/>, onSelect: () => navigate(item.id)})),
     {id:'files', label:'Files', section:'Navigate', icon:<Icon name="file"/>, keywords:['documents','pdf','docx','pptx'], onSelect:() => {reset(); navigate('library'); setTab('files');}},
     {id:'add-memory', label:'Add memory', section:'Create', icon:<Icon name="plus"/>, keywords:['new','note'], onSelect:() => setForm('memory')},
     {id:'import-file', label:'Import file', section:'Create', icon:<Icon name="upload"/>, keywords:['pdf','document','upload'], onSelect:() => setForm('file')},
@@ -204,7 +213,7 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
     <a className="skip-link" href="#main-content">Skip to content</a>
     <aside className="library-sidebar">
       <header className="library-brand">
-        <button className={`brand-mark ${activityStatus?.origin === 'agent' ? 'agent-active' : ''}`} aria-label="hunter/gatherer home" title="hunter/gatherer" onClick={() => navigate('evidence')}><HunterGathererMark/></button>
+        <button className={`brand-mark ${activityStatus?.origin === 'agent' ? 'agent-active' : ''}`} aria-label="hunter/gatherer home" title="hunter/gatherer" onClick={() => navigate('connections')}><HunterGathererMark/></button>
         <div className="sidebar-tools"><button className="icon-button" aria-label="Customize appearance" title={`Appearance · ${appearance.theme}`} onClick={() => setAppearanceOpen(true)}><Icon name="sliders" size={17}/></button></div>
       </header>
       <nav className="workspace-navigation" aria-label="Main navigation">{NAV.map(item => <button key={item.id} aria-current={view === item.id ? 'page' : undefined} className={`navigation-item ${view === item.id ? 'active' : ''} ${['review','health','connection'].includes(item.id) ? 'utility-navigation' : ''}`} onClick={() => navigate(item.id)}><Icon name={item.icon} size={18}/><span>{item.label}</span>{item.id === 'review' && !!overview?.counts.pending && <small>{overview.counts.pending}</small>}{item.id === 'health' && <i className={`nav-status-dot tone-${healthSummary?.tone || 'gray'}`} role="img" aria-label={healthLabel(healthSummary)} title={healthLabel(healthSummary)}/>}{item.id === 'connection' && <i className={`nav-status-dot tone-${connectionTone}`} role="img" aria-label={connectionLabel} title={connectionLabel}/> }</button>)}</nav>
@@ -216,9 +225,9 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
     </aside>
     <main id="main-content" className={`workspace workspace-${view}`}>
       <header className="workspace-top">
-        <div className={`view-title ${view === 'connections' ? 'graph-title-hidden' : ''}`} key={view}><h1>{title}</h1>{browsing && activeGroup && <><span className="breadcrumb-slash">/</span><button className="active-group-name" title="Show all groups" onClick={() => chooseGroup('')}>{activeGroup.label}<Icon name="close" size={12}/></button></>}</div>
+        <div className={`view-title ${view === 'connections' ? 'graph-title-hidden' : ''}`} key={view}><h1>{title}</h1>{browsing && activeGroup && view!=='connections' && <><span className="breadcrumb-slash">/</span><button className="active-group-name" title="Show all groups" onClick={() => chooseGroup('')}>{activeGroup.label}<Icon name="close" size={12}/></button></>}</div>
         <div className={`activity-status ${activityStatus ? 'is-active' : ''} ${activityStatus?.phase === 'error' ? 'has-error' : ''}`} role="status" aria-live="polite" aria-atomic="true" title={activityConnected ? 'Live activity from this hunter/gatherer service' : 'Reconnecting live activity'}><span className={`activity-dot ${activityConnected ? 'connected' : ''}`}/>{activityStatus && <span>{activityStatus.origin === 'agent' ? 'Agent · ' : ''}{activityStatus.label}</span>}</div>
-        <UnifiedSearch inputRef={searchInput} mode={searchMode} onModeChange={setSearchMode} query={searchQuery} onQuery={changeSearchQuery} commands={commands} groupLabel={activeGroup?.label} onClearGroup={() => chooseGroup('')} onGather={gatherEvidence} onSearch={text => {setSearchMode('records');setQuery(text);setSearch(text.trim());setOffset(0);if (!browsing) {setTab(recordSearchTab(tab));navigate('library');}}}/>
+        <UnifiedSearch inputRef={searchInput} mode={searchMode} onModeChange={changeSearchMode} query={searchQuery} onQuery={changeSearchQuery} commands={commands} groupLabel={activeGroup?.label} onClearGroup={() => chooseGroup('')} onGather={gatherEvidence} onSearch={text => {setAskResultsOpen(false);setSearchMode('records');setQuery(text);setSearch(text.trim());setOffset(0);if (!browsing) {setTab(recordSearchTab(tab));navigate('library');}}}/>
 
         <div className="top-actions"><label className={`privacy-control ${includePrivate ? 'enabled' : ''}`} title="Include private records"><input type="checkbox" aria-label="Include private records" checked={includePrivate} onChange={e => privacyChange(e.target.checked)}/><Icon name={includePrivate ? 'unlock' : 'lock'} size={16}/><span>Private</span></label><button className="button" aria-label="Import file" title="Import file" onClick={() => setForm('file')}><Icon name="upload" size={15}/><span>Import</span></button><button className="button primary" aria-label="Add memory" title="Add memory" onClick={() => setForm('memory')}><Icon name="plus" size={16}/><span>Add memory</span></button></div>
       </header>
@@ -247,10 +256,13 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
             </div>
             {page && (offset > 0 || page.next_offset != null) && <div className="pagination"><button className="button small" disabled={!offset} onClick={() => setOffset(Math.max(0, offset-30))}>Previous</button><span>{offset+1}–{offset+(memories?.length || documents?.length || 0)} of {page.total}</span><button className="button small" disabled={page.next_offset == null} onClick={() => setOffset(page.next_offset!)}>Next</button></div>}
           </>}
-          {view === 'connections' && graph && <ConnectionMap initialCamera={positions.current.camera(cameraKey)} saveCamera={snapshot=>positions.current.saveCamera(cameraKey,snapshot)} toolbarContent={<BoardControls onEditorOpenChange={setBoardEditorOpen} compact settings={board} groups={editableBoardGroups} records={graph.nodes.filter(node=>node.type!=='topic')} includeSensitive={includePrivate} onChange={boardChanged} editTarget={boardTarget} onEditClose={()=>setBoardTarget(null)}/>} key={browseKey} activity={activity} graph={graph} boardSettings={board||undefined} focusRequest={focusRequest} onUserNavigate={onUserNavigate} onGroupResize={resizeGroup} onEditGroup={editGroup} onEditRecord={editRecord} selectedId={selectedNode?.id} onSelect={chooseNode} onGroupSelect={chooseGroup}/>}
+          {view === 'connections' && graph && <div className={`graph-surface ${askResultsOpen?'has-quotes':''} ${graphPreview?'graph-is-preview':''}`}><div ref={graphSurfaceRef} className="graph-surface-map" aria-hidden={graphPreview||undefined}><ConnectionMap initialCamera={positions.current.camera(cameraKey)} saveCamera={snapshot=>positions.current.saveCamera(cameraKey,snapshot)} toolbarContent={<BoardControls onEditorOpenChange={setBoardEditorOpen} compact settings={board} groups={editableBoardGroups} records={graph.nodes.filter(node=>node.type!=='topic')} includeSensitive={includePrivate} onChange={boardChanged} editTarget={boardTarget} onEditClose={()=>setBoardTarget(null)}/>} key={browseKey} activity={activity} graph={graph} boardSettings={board||undefined} focusRequest={focusRequest} onUserNavigate={onUserNavigate} onGroupResize={resizeGroup} onEditGroup={editGroup} onEditRecord={editRecord} selectedId={selectedNode?.id} onSelect={chooseNode} onGroupSelect={chooseGroup}/></div>{graphPreview&&<button className="graph-preview-expand" onClick={closeAskResults}><span><Icon name="connections" size={14}/>Expand graph</span></button>}{!askResultsOpen&&!!evidenceSeed.query&&!!askQuery.trim()&&<button className="button graph-quotes-return" onClick={()=>{setSearchMode('ask');setAskResultsOpen(true);setSelection(null);setHistory([]);requestAnimationFrame(()=>quotesRef.current?.focus());}}><Icon name="knowledge" size={14}/>View quotes</button>}</div>}
           {view==='library'&&tab==='imports'&&<LibraryImports includePrivate={includePrivate} revision={revision} select={openSelection} notify={setNotice}/>}
           {/* One owner retains candidate sources and unsaved work across navigation. Privacy changes remount LibraryWorkspace. */}
-          <div hidden={view !== 'evidence' && !(view === 'library' && tab === 'collections')}><EvidenceWorkspace active={view === 'evidence' || (view === 'library' && tab === 'collections')} mode={view==='library'&&tab==='collections'?'collections':'evidence'} seed={evidenceSeed} includePrivate={includePrivate} select={openSelection} notify={setNotice} selectedOriginalPage={selectedOriginalPage} onBusyChange={setCollectionBusy}/></div>
+          <div ref={quotesRef} role={view==='connections'?'region':undefined} aria-label={view==='connections'?`Quotes for ${evidenceSeed.query}`:undefined} tabIndex={view==='connections'?-1:undefined} className={view==='connections'?'graph-search-results':undefined} hidden={!(view==='connections'&&askResultsOpen) && !(view === 'library' && tab === 'collections')}>
+            {view==='connections'&&<div className="graph-results-navigation"><button className="text-button" onClick={closeAskResults}><Icon name="connections" size={14}/>Back to graph</button><button className="icon-button" aria-label="Close quotes" onClick={closeAskResults}><Icon name="close" size={14}/></button></div>}
+            <EvidenceWorkspace embedded={view==='connections'} searchDraft={askQuery} active={(view==='connections'&&askResultsOpen) || (view === 'library' && tab === 'collections')} mode={view==='library'&&tab==='collections'?'collections':'evidence'} seed={evidenceSeed} includePrivate={includePrivate} select={openSelection} notify={setNotice} selectedOriginalPage={selectedOriginalPage} onBusyChange={setCollectionBusy}/>
+          </div>
           {view === 'review' && <LibraryReview source={reviewSource} includePrivate={includePrivate} select={openSelection} changed={changed} revision={revision}/>}
           {view === 'health' && <LibraryHealth includePrivate={includePrivate} select={openSelection} onScan={healthScanned} lastScan={healthSummary}/>}
           {view === 'connection' && <div className="connection-view"><div className="connection-banner"><span className={`nav-status-dot tone-${connectionTone}`} role="img" aria-label={connectionLabel} title={connectionLabel}/><h2>{connectionState === 'connected' ? 'API connected' : connectionState === 'connecting' ? 'Connecting' : 'Unavailable'}</h2></div><dl className="service-details"><div><dt>Store</dt><dd>{overview?.store.id || '—'}</dd></div><div><dt>API</dt><dd><code>{window.location.origin}/api/library</code></dd></div><div><dt>MCP</dt><dd><code>{window.location.origin}/mcp</code></dd></div><div><dt>Database</dt><dd><code>{overview?.store.database || '—'}</code></dd></div></dl><button className="button" onClick={() => setRevision(v => v+1)}>Refresh</button></div>}
