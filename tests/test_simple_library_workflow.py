@@ -94,6 +94,27 @@ def test_memory_correction_history_and_sensitive_mutation_guard(store):
     assert invoke(server, 'proharness_memory', action='profile')['count'] == 0
 
 
+def test_rejected_memory_arguments_explain_recovery_without_mutation(store):
+    server = server_for(store)
+    remembered = invoke(server, 'proharness_memory', action='remember', text='The fictional trial starts Monday.')
+    identity = remembered['id']
+    rejected = asyncio.run(server.call_tool('proharness_memory', {
+        'action': 'replace', 'memory_id': identity, 'text': 'The fictional trial starts Friday.',
+        'importance': 8, 'source': 'a source value that must not appear in the error',
+    }))
+    assert rejected.is_error
+    message = ' '.join(part.text for part in rejected.content if part.type == 'text')
+    assert "memory action 'replace': importance, source" in message
+    assert 'Allowed arguments: include_sensitive, memory_id, metadata, text' in message
+    assert 'No changes were made' in message
+    assert 'Friday' not in message and 'must not appear' not in message
+    assert store.get(identity).is_retrievable()
+    assert store.get(identity).text == 'The fictional trial starts Monday.'
+    corrected = invoke(server, 'proharness_memory', action='replace', memory_id=identity,
+                       text='The fictional trial starts Friday.')
+    assert corrected['replaced']
+
+
 def test_outline_not_blocked_by_quote_budget(store, tmp_path):
     path = tmp_path / 'long.txt'
     path.write_text('Greenhouse notes ' * 490)

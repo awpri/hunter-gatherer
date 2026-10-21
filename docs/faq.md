@@ -8,7 +8,7 @@ assistant through [MCP](mcp.md) to reason over them.
 
 ## What does a highlighted sentence mean?
 
-It matches wording in your question and helps you scan a passage. The emphasis
+It is selected to help you scan for text related to your question. The emphasis
 does not verify the statement. Expand the passage and inspect its source for
 qualifications, dates and context.
 

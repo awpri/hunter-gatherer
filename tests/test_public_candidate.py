@@ -46,7 +46,7 @@ def test_selected_boundary_and_local_markdown_links(exporter):
 def test_manifest_hashes_actual_readme_and_refuses_reuse(exporter, monkeypatch, tmp_path, capsys):
     root = tmp_path / "source"
     root.mkdir()
-    (root / "README.md").write_text("Public project overview\n[License](LICENSE)")
+    (root / "README.md").write_bytes(b"Public project overview\n[License](LICENSE)")
     (root / "docs").mkdir()
     (root / "docs/public-release-guide.md").write_text("[License](../LICENSE)")
     (root / "LICENSE").write_text("Synthetic license marker")

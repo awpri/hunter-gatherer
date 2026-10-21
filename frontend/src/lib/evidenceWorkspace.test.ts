@@ -120,3 +120,67 @@ describe('Compact source result presentation',()=>{
   expect(passageLocation({...source,title:'Pilot plan',location:{page:3,section:'Schedule'}})).toBe('Page 3 · Schedule · Version 2');
  });
 });
+
+describe('Authenticity questions select source-status wording',()=>{
+ const focused=(quote:string,query:string)=>{
+  const result=passageExcerpt(quote,query);
+  expect(quote).toContain(result.text);
+  return {result,focus:result.text.slice(result.focusStart,result.focusEnd)};
+ };
+ it.each([pilotPlan,pilotReview])('uses the fictional-source statement in the demo rather than subject-name matches',quote=>{
+  const {result,focus}=focused(quote as string,'is the lantern pilot real or no');
+  expect(focus).toBe('Fictional source.');
+  expect(result.text).toContain('Northstar Workshop and all named people are invented.');
+  expect(result.text).not.toMatch(/# Lantern/);
+  expect(focus).not.toContain('owner');
+ });
+ it.each([
+  ['Is the Borealis initiative real?', 'The organizations and participants are invented.'],
+  ['Is the Borealis initiative fictional?', 'The organizations and participants are invented.'],
+  ['Is the Borealis initiative not real?', 'The Borealis initiative is not fictional.'],
+  ['Can you verify whether the Borealis initiative is genuine?', 'This is an authentic account of a real project.'],
+  ['Does the Borealis initiative actually exist?', 'This is a made-up scenario for training.'],
+ ])('focuses relevant status language for %s without changing its polarity',(query,status)=>{
+  const quote='# Borealis initiative\n\n'+status+' The description covers only the documented scenario.\n\nThe Borealis initiative coordinator changed in April. The Borealis initiative review is on Friday.';
+  const {result,focus}=focused(quote,query);
+  expect(focus).toBe(status);
+  expect(result.text).toContain('The description covers only the documented scenario.');
+ });
+ it.each([
+  ['Are the Orchid measurements real?', 'These records are synthetic and do not describe actual participants.'],
+  ['Is this real data or a demo?', 'The dataset contains demonstration data for interface testing.'],
+  ['Are the Orchid measurements synthetic data?', 'The records were generated for testing; no real people participated.'],
+ ])('recognizes generated/demo data wording for %s',(query,status)=>{
+  const quote='# Orchid measurements\n\nThe Orchid measurements have a revised catalog and a new owner.\n\n'+status+' Values illustrate the workflow only. The catalog has three columns and is refreshed every Tuesday.';
+  const {focus}=focused(quote,query);
+  expect(focus).toBe(status);
+ });
+ it('does not let an authenticity adjective replace a scheduling question',()=>{
+  const quote='# Borealis initiative\n\nFictional source. Every named organization is invented. The weekly review is Tuesday at 10:00 UTC. The review time may change.';
+  const {focus}=focused(quote,"When is the fictional Borealis initiative's weekly review?");
+  expect(focus).toBe('The weekly review is Tuesday at 10:00 UTC.');
+ });
+ it('does not treat real-time or a synthetic material as a source authenticity question',()=>{
+  const quote='# Laboratory notes\n\nFictional source. All named people are invented. Synthetic fuel is safe only under the listed operating limits. Real-time measurements arrive every Tuesday. Follow the documented handling process.';
+  expect(focused(quote,'Is synthetic fuel safe?').focus).toBe('Synthetic fuel is safe only under the listed operating limits.');
+  expect(focused(quote,'When do real-time measurements arrive?').focus).toBe('Real-time measurements arrive every Tuesday.');
+ });
+ it('does not reinterpret a request to verify the real cost as a fictionality check',()=>{
+  const quote='# Workshop budget\n\nFictional source. Every named organization is invented. The real cost of the Borealis initiative is estimated at 200 units. The estimate excludes tax and delivery.';
+  const {focus}=focused(quote,'Can you verify the real cost of the Borealis initiative?');
+  expect(focus).toBe('The real cost of the Borealis initiative is estimated at 200 units.');
+ });
+ it('keeps unmatched source text intact when no relevant status statement is available',()=>{
+  const quote='The archive contains an index of workshops and meeting dates. '.repeat(4);
+  expect(passageExcerpt(quote,'Is the Solstice expedition real?')).toEqual({text:quote,leading:false,trailing:false,clipped:false});
+ });
+ it('trims structural context edges but retains the adjacent factual qualification verbatim',()=>{
+  const qualification='It is based on observations from an earlier study, not its named participants.';
+  const quote='# Juniper case study\n\nAuthor: Research team\n\nThis case study is fictional. '+qualification+'\n\nVersion: 3\n\nThe study files are catalogued separately.';
+  const {result,focus}=focused(quote,'Is the Juniper case study real?');
+  expect(focus).toBe('This case study is fictional.');
+  expect(result.text).toBe('This case study is fictional. '+qualification);
+  expect(result.leading).toBe(true);
+  expect(result.trailing).toBe(true);
+ });
+});

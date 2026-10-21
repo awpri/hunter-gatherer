@@ -73,6 +73,7 @@ there is no h/g package release on PyPI yet.
 
 Bug reports, documentation improvements and focused pull requests are welcome.
 Start with [CONTRIBUTING.md](CONTRIBUTING.md), or [open an issue](https://github.com/awpri/hunter-gatherer/issues/new/choose).
+See [SECURITY.md](SECURITY.md) for the security boundaries and reporting setup.
 
 ## License
 

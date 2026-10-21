@@ -87,16 +87,19 @@ not automatically a problem.
 1. **Reliable library release:** passing packaged-demo checks on supported
    platforms, clear setup and recovery instructions, source navigation and
    accessible graph/search behavior.
-2. **Installation boundaries:** measure the dependency footprint, separate
+2. **Complete the rename and migrate deliberately:** move public and internal
+   interfaces to h/g names, then validate a copy of an existing library before
+   explicitly switching the active installation. Follow the sequence below.
+3. **Installation boundaries:** measure the dependency footprint, separate
    optional capabilities where safe, and document supported versus experimental
    paths. Keep existing environments and stored libraries compatible.
-3. **Small optional voice integration:** editable search dictation first;
+4. **Small optional voice integration:** editable search dictation first;
    read-aloud second if useful. Validate actual microphone/audio devices and
    cancellation rather than assuming the Python components complete the UI.
-4. **Optional cited synthesis:** one configured model over selected sources,
+5. **Optional cited synthesis:** one configured model over selected sources,
    explicit execution, working usage accounting and cancellation. Add fallback
    and budget policy after this narrow path is demonstrated end to end.
-5. **Measured extensions:** advanced routing, caching and automation only when
+6. **Measured extensions:** advanced routing, caching and automation only when
    evaluations show a concrete gain in reliability, quality, latency or cost.
 
 Known runtime integration work includes making a selected within-tier
@@ -104,6 +107,36 @@ Known runtime integration work includes making a selected within-tier
 updates, and applying or removing the governor's currently unused alpha offset.
 These are reasons to avoid promising automatic model optimization today, not
 limitations of the quote-first search workflow.
+
+## Finish the rename, then migrate a library
+
+The intended destination is a consistent hunter/gatherer identity, including
+internal names. The current compatibility names are transitional. This is a
+future implementation sequence; documenting it does not migrate or switch a
+live library.
+
+1. **Define compatibility first.** Inventory package imports, commands, MCP tools,
+   resource URIs, environment settings and stored references. Add compatibility
+   tests and document deprecations before changing these interfaces.
+2. **Introduce the h/g namespace.** Rename the package, CLI, MCP server and tools,
+   resource URI scheme, environment variables and configuration defaults using
+   consistent machine-safe names. Update documentation and client setup together.
+   Keep explicit transitional aliases where existing clients or citations need
+   them; remove old product references as those dependencies are retired.
+3. **Migrate an isolated copy.** Verify a backup of the existing database and
+   preserved source archive, then migrate a separate copy with its own settings
+   and paths. Keep the original installation and library intact.
+4. **Verify the whole library.** Check that citations resolve to the same sources,
+   document versions and memory correction histories survive, and collections,
+   privacy controls and embedding configuration retain their behavior. Compare
+   representative retrieval results and test backup and restore of the migrated
+   library. Rebuild an index only when the selected embedding configuration needs
+   it; do not silently substitute a different model.
+5. **Make an explicit cutover.** Switch the active UI and MCP client configuration
+   only after the migrated copy passes verification and the owner approves that
+   switch. Retain the original and verified backup for rollback. Retire legacy
+   aliases according to the documented compatibility plan, without breaking
+   saved citation resolution.
 
 ## Implementation references
 

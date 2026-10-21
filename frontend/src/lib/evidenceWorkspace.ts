@@ -96,6 +96,27 @@ export function passageLocation(passage:SourcePassage):string {
  return [passage.location?.page?`Page ${passage.location.page}`:'',section===passage.title?'':section,passage.version&&!namedVersion?`Version ${passage.version}`:'',passage.is_latest===false?'Historical':''].filter(Boolean).join(' · ');
 }
 
+/** Recognize a question about source status, not uses such as "real-time". */
+function asksAboutAuthenticity(query:string):boolean {
+ const wording=query.toLowerCase().replace(/\breal[\s-]+time\b/g,'realtime');
+ const status='(?:real|genuine|authentic|fiction(?:al)?|fictitious|invented|fabricated|fake|made[\\s-]+up|simulated|synthetic|demo(?:nstration)?|mock|sample)';
+ // An attribute mentioned inside another question ("Who owns the fictional
+ // project?") must not change that question into a fictionality check.
+ return /\b(?:authenticity|fictionality)\b|\b(?:actually|really)\s+exist\b/i.test(wording)
+  || new RegExp(`^(?:is|are|was|were|isn['’]t|aren['’]t|wasn['’]t|weren['’]t)\\b.+\\b${status}\\b(?:[\\s?!.,]*(?:or\\b.*)?)?$`,'i').test(wording)
+  || new RegExp(`\\b(?:whether|if)\\b.+\\b${status}\\b(?:[\\s?!.,]*(?:or\\b.*)?)?$`,'i').test(wording)
+  || new RegExp(`^(?:is|are|was|were|does|do)\\b.+\\b${status}\\s+(?:data|datasets?|records?|sources?|documents?|projects?|companies|company|people|persons?|examples?|scenarios?|reports?|events?|case\\s+stud(?:y|ies))\\b`,'i').test(wording);
+}
+
+/** Source wording that can address authenticity in either direction. No verdict. */
+function hasAuthenticityWording(text:string):boolean {
+ return /\b(?:fictional|fictitious|invented|fabricated|fake|genuine|authentic|made[\s-]+up)\b/i.test(text)
+  || /\b(?:synthetic|simulated|mock|sample|demo(?:nstration)?|training|test)\s+(?:data(?:sets?)?|records?|sources?|documents?|projects?|examples?|scenarios?|reports?|events?|case\s+stud(?:y|ies))\b/i.test(text)
+  || /\b(?:data(?:sets?)?|records?|examples?|scenarios?)\s+(?:(?:is|are|was|were)\s+)?(?:(?:not|entirely|all|artificially)\s+)*(?:synthetic|simulated|generated|mock)\b/i.test(text)
+  || /\b(?:for|as)\s+(?:(?:a|an)\s+)?(?:demo(?:nstration)?|training|testing)\b/i.test(text)
+  || /\breal(?:[\s-]+world)?\s+(?:data(?:sets?)?|records?|sources?|documents?|projects?|companies|company|people|persons?|events?)\b/i.test(text)
+  || /\b(?:is|are|was|were)\s+(?:(?:not|entirely|all)\s+)*(?:real|genuine|authentic)\b/i.test(text);
+}
 
 /** A display window into the original text, not a summary or retrieval policy. */
 export function passageExcerpt(quote:string,query:string):{text:string;leading:boolean;trailing:boolean;clipped:boolean;focusStart?:number;focusEnd?:number} {
@@ -104,7 +125,8 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
  const stop=new Set('the and for that this with from what when where which who whom whose why how was were are does did has have had can could would should about into than then there their they them these those your you our its any all more find show tell give please looking need know'.split(' '));
  const terms=new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(term=>!stop.has(term)));
  if(!terms.size)return full;
- const units:{start:number;end:number;score:number;matches:string[];structural:boolean}[]=[];
+ const authenticity=asksAboutAuthenticity(query);
+ const units:{start:number;end:number;score:number;matches:string[];structural:boolean;statusMatch:boolean}[]=[];
  // Keep complete sentences and paragraphs; soft line wraps must not split meaning.
  // Offsets always refer to the raw source, including its original whitespace.
  const boundaries=[...new Set([...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\n{2,}/gu),...quote.matchAll(/^#{1,6}[^\n]*(?:\n|$)/gm)].map(match=>match.index!+match[0].length))].sort((a,b)=>a-b);
@@ -116,20 +138,30 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
    const words=new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);
    const matches=[...terms].filter(term=>words.has(term));
    const structural=/^\s*#{1,6}\s/.test(text)||/^\s*(?:date|author|title|version)\s*:[^\n]*\s*$/i.test(text);
-   units.push({start,end,score:0,matches,structural});
+   units.push({start,end,score:0,matches,structural,statusMatch:authenticity&&hasAuthenticityWording(text)});
   }
   start=end;
  }
  // Repeated subject names identify the document; rarer question terms identify
  // the sentence to read. Heading matches alone must not displace source prose.
  const frequency=new Map([...terms].map(term=>[term,units.filter(unit=>unit.matches.includes(term)).length]));
- const bodyMatches=units.some(unit=>!unit.structural&&unit.matches.length>0);
- for(const unit of units){unit.score=unit.structural&&bodyMatches?0:unit.matches.reduce((score,term)=>score+1/(frequency.get(term)||1),0);}
+ const bodyMatches=units.some(unit=>!unit.structural&&(unit.matches.length>0||unit.statusMatch));
+ for(const unit of units){
+  const overlap=unit.matches.reduce((score,term)=>score+1/(frequency.get(term)||1),0);
+  // For explicit authenticity questions, source-status wording matters more
+  // than repeated project names. This changes presentation only: it neither
+  // verifies a claim nor filters sources, and negation remains in the sentence.
+  unit.score=unit.structural&&bodyMatches?0:overlap+(unit.statusMatch?terms.size+1:0);
+ }
  const best=units.reduce((selected,unit,index)=>unit.score>(units[selected]?.score||0)?index:selected,-1);
  if(best<0)return full;
  // Keep immediate context, including qualifications and negations, without padding
  // a short matching sentence with unrelated archive prose just to fill the card.
- const first=Math.max(0,best-1),last=Math.min(units.length-1,best+1);
+ let first=Math.max(0,best-1),last=Math.min(units.length-1,best+1);
+ // Trim only structural edges. Do not jump over an interior heading to join
+ // separate spans, or discard neighboring prose that qualifies the focus.
+ while(first<best&&units[first].structural)first++;
+ while(last>best&&units[last].structural)last--;
  let from=units[first].start,to=units[last].end;
  while(from<to&&/\s/.test(quote[from]))from++;
  while(to>from&&/\s/.test(quote[to-1]))to--;

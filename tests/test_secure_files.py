@@ -11,14 +11,16 @@ from proharness.memory.secure_files import lock_exclusive, open_regular
 
 
 def test_binary_read_and_descriptor_ownership(tmp_path):
-    path = tmp_path / "source.txt"
+    directory = tmp_path / "nested"
+    directory.mkdir()
+    path = directory / "source.txt"
     content = "Fictional café 雪\r\n".encode() + b"\x1a\x00"
     path.write_bytes(content)
     with os.fdopen(open_regular(path), "rb") as source:
         assert source.read() == content
     # No leaked ancestor/file handles prevent removing the source or directory.
     path.unlink()
-    tmp_path.rmdir()
+    directory.rmdir()
 
 
 @pytest.mark.parametrize("ancestor", [False, True], ids=["leaf", "ancestor"])

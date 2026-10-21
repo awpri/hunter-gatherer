@@ -83,3 +83,5 @@ manifest records selected file hashes and sizes.
 
 Project source is Apache-2.0; retain the license and third-party notices with any
 bundled assets.
+
+See the [security policy](SECURITY.md) before sharing vulnerability details.
