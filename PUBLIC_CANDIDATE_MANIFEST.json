@@ -2086,8 +2086,8 @@
     },
     {
       "path": "tests/test_terminal.py",
-      "bytes": 12184,
-      "sha256": "5542fc3a0cd2569c10329ed6a5f57da6ead38c1757ca61b58a3af214a4795253"
+      "bytes": 12218,
+      "sha256": "71a289b0defa73466747568366bc036ca6c7c161e3edf71c2dcc93a7e308aaa3"
     },
     {
       "path": "tests/test_visual_regions.py",

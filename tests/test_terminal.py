@@ -48,7 +48,7 @@ def test_demo_ask_json_is_exact_offline_and_ignores_user_config(library, monkeyp
     assert len(packet["supporting_passages"]) == 2
     for passage in packet["supporting_passages"]:
         expected = next(item for item in manifest["documents"] if item["document_id"] == passage["document_id"])
-        assert passage["quote"] == Path(expected["input"]).read_text()
+        assert passage["quote"] == Path(expected["input"]).read_text(encoding="utf-8")
         assert "Fictional source." in passage["quote"]
         assert passage["citation"].startswith("[doc:")
     assert "\x1b" not in output.out
@@ -120,7 +120,7 @@ def test_json_escapes_controls_losslessly_and_human_output_is_literal(library, t
     directory, _ = library
     malicious = "Terminal control sample [bold red]literal[/bold red] \x1b]52;c;CLIPBOARD\x07\r\u202e secret.\n"
     source = tmp_path / "terminal.txt"
-    source.write_text(malicious)
+    source.write_text(malicious, encoding="utf-8")
     with MemoryStore(demo_settings(directory)) as store:
         DocumentArchive(store).ingest(str(source), title="Terminal sample [bold red] \x1b]2;TITLE\x07")
     assert ask(directory, "terminal control sample", "--json") == 0
