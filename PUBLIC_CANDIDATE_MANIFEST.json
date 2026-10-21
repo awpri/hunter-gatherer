@@ -332,8 +332,8 @@
     },
     {
       "path": "frontend/src/components/WorkspaceCompact.css",
-      "bytes": 3541,
-      "sha256": "7f55528df66169c3dc5b1003173be8a63a6398ed2cd71aed38b15c6a27952610"
+      "bytes": 3456,
+      "sha256": "2ff3ecd6ed65a4ac3142723c10a9aeb1d1323d04d6d90ecc6f5d37d2809761ae"
     },
     {
       "path": "frontend/src/components/connectionFlowModel.test.ts",
@@ -1591,14 +1591,14 @@
       "sha256": "f03e5cdcee48063e11dfd47e022f73393dc49cce35a8ce4166a3a7a41f0cc82f"
     },
     {
-      "path": "proharness/server/library_static/assets/index-CKqufVYw.js",
-      "bytes": 419476,
-      "sha256": "ef514e90c0d769e45797281ffe5e08154f25b3a1a3dcd32af1bbf5eb1dc4873d"
+      "path": "proharness/server/library_static/assets/index-BQKdmfnZ.css",
+      "bytes": 120727,
+      "sha256": "21c2c364c3f535556ebcc820941b1fbb0cd079bc67bec09c66afd2e1cd5a6fd8"
     },
     {
-      "path": "proharness/server/library_static/assets/index-DUTwrGx9.css",
-      "bytes": 120808,
-      "sha256": "28a42d1a6a657949ff24d6c412418aa32cae57e898d9e49b0e38b36a5bcbd4dd"
+      "path": "proharness/server/library_static/assets/index-kfxiCqrM.js",
+      "bytes": 419476,
+      "sha256": "ef514e90c0d769e45797281ffe5e08154f25b3a1a3dcd32af1bbf5eb1dc4873d"
     },
     {
       "path": "proharness/server/library_static/brand/hg-compact.svg",
@@ -1633,7 +1633,7 @@
     {
       "path": "proharness/server/library_static/index.html",
       "bytes": 2093,
-      "sha256": "f169727f6254b800415c632be930954d2369d92b4788346699e29e43ab584db0"
+      "sha256": "3ec89ff0a8c4414c78354ad3914f3c937fe789673122f02136c8d0ee57654972"
     },
     {
       "path": "proharness/server/library_static/licenses/Lucide-LICENSE.txt",
