@@ -37,7 +37,7 @@ jobs:
           cd "$RUNNER_TEMP"
           export PAGE_IMAGE_TEST_PYTHON="$smoke_python"
           "$smoke_python" -m pytest -q --tb=short -p no:cacheprovider --junitxml="$RUNNER_TEMP/packaged-tests.xml" "$RUNNER_TEMP/public-candidate/tests"
-          "$smoke_python" -I -B smoke_packaged_demo.py --output packaged-demo.json
+          "$smoke_python" -I -B smoke_packaged_demo.py --require-lean --output packaged-demo.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

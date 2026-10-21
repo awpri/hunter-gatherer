@@ -59,6 +59,24 @@ web feature is available.
 See the [roadmap](roadmap.md) for the proposed integration order and which
 components should remain optional.
 
+## Do I need to download every dependency or model?
+
+No. The base install runs the fictional library, web UI, terminal search and MCP
+without neural embedding models, speech packages, OCR or cloud SDKs. `hunt setup`
+shows optional capabilities and install hints without downloading anything. Use
+pip or uv in the h/g environment to add only the extras you need; see
+[setup](getting-started.md#optional-features).
+
+An existing semantic library still needs its configured embedding model. Missing
+packages must not silently change that model or replace it with demo hashing.
+
+## Can an agent use the command line instead of MCP?
+
+Yes. `hunt ask "question" --json` returns structured evidence, and `hunt open`
+reads a citation. Both use the same source-reading and access rules as the
+library. Pass `--demo-library DIR` for the isolated demo. The [terminal guide](cli.md)
+covers output limits and exit codes; MCP remains useful for an ongoing session.
+
 ## Is everything local?
 
 The dedicated fictional demo uses local SQLite and deterministic hashing
@@ -81,14 +99,14 @@ record or backup. Manage retained backups separately. See
 
 ## Why are some names still ProHarness?
 
-The product and interface are hunter/gatherer, while the internal Python package,
-commands and MCP names remain `proharness` for compatibility. Use separate virtual
+The product, interface and `hunt` command are hunter/gatherer, while the internal
+Python package, older commands and MCP names retain `proharness` for compatibility. Use separate virtual
 environments for h/g and ProHarness. The original live ProHarness library is not
 part of this repository or the fictional demo.
 
 ## Is there a published package or a stable release?
 
-Source installation is the documented path. There is no h/g PyPI release yet.
+Source installation is the documented path. There is no h/g PyPI or Homebrew release yet.
 This is an early project; inspect the
 [packaged-install CI results](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)
 for your platform. The demo tests cover a defined source and packaging boundary,

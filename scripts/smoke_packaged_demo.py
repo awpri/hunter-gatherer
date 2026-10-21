@@ -138,6 +138,7 @@ async def check_original_region(client, root, citation=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--require-lean", action="store_true", help="assert heavyweight optional packages are absent")
     parser.add_argument(
         "--allow-source",
         action="store_true",
@@ -159,6 +160,11 @@ def main():
         "installed_package_path_verified": imported.is_relative_to(package_root),
         "checks": [],
     }
+    if args.require_lean:
+        installed = {dist.metadata["Name"].lower().replace("_", "-") for dist in importlib.metadata.distributions()}
+        unwanted = installed & {"torch", "sentence-transformers", "transformers", "qdrant-client", "openai", "anthropic", "docling", "faster-whisper"}
+        assert not unwanted, f"Unexpected heavyweight dependencies: {sorted(unwanted)}"
+        record["lean_install_verified"] = True
     with tempfile.TemporaryDirectory(prefix="proharness-smoke-") as temporary:
         root = Path(temporary).resolve()
         target = root / "fictional-demo"
@@ -203,6 +209,23 @@ def main():
             created.check_returncode()
         assert json.loads(created.stdout)["fictional"] is True
         assert json.loads((target / "manifest.json").read_text())["fictional"] is True
+        # Exercise the actual packaged entry point, with no web server needed.
+        hunt = Path(sysconfig.get_path("scripts")) / ("hunt.exe" if os.name == "nt" else "hunt")
+        assert hunt.is_file(), "The hunt console entry point is missing"
+        def cli_json(arguments):
+            response = subprocess.run([str(hunt), *arguments], cwd=root, env=env,
+                                      capture_output=True, text=True, encoding="utf-8", timeout=60)
+            assert response.returncode == 0, response.stderr
+            assert "\x1b" not in response.stdout, "ANSI polluted JSON output"
+            return json.loads(response.stdout)
+        assert cli_json(["setup", "--json"])["kind"] == "setup"
+        asked = cli_json(["ask", "What is the Lantern pilot's weekly review schedule?",
+                          "--demo-library", str(target), "--json"])
+        assert asked["schema_version"] == 1 and asked["kind"] == "ask"
+        passage = next(item for page in asked["pages"] for item in page["supporting_passages"] if "Tuesday" in item["quote"])
+        opened = cli_json(["open", passage["citation"], "--demo-library", str(target), "--json"])
+        assert passage["quote"] in [item["quote"] for item in opened["result"]["sources"]]
+        record["terminal_ask_open_setup"] = True
         collection_id = None
         region_citation = None
 

@@ -1,34 +1,22 @@
 """Shared test fixtures.
 
-Tests run without Qdrant and without sentence-transformers — the store falls
-back to the in-memory vector backend + hashing embedder, which is fast and
-deterministic for the logic we're testing.
+Tests run without Qdrant and without sentence-transformers. They explicitly
+select hashing embeddings, which are fast and deterministic for the logic
+we're testing; production missing dependencies must never select hashing.
 
-Default model selection uses the hashing fallback even when optional model
-packages happen to be installed. Tests of explicit model adapters can override
-the factory availability check locally; no test downloads weights implicitly.
+Tests of explicit model adapters can override the factory availability check
+locally; no test downloads weights implicitly.
 """
 from __future__ import annotations
 
-# Stub qdrant_client at import time so the QdrantBackend import inside the store
-# fails cleanly and we get the in-memory backend. (We never want to require a
-# running Qdrant server for unit tests.)
-import sys
-import types
+import os
+import pathlib
 
-if "qdrant_client" not in sys.modules:
-    _m = types.ModuleType("qdrant_client")
-    _m.models = types.ModuleType("qdrant_client.models")
-    sys.modules["qdrant_client"] = _m
+import pytest
 
-import os  # noqa: E402
-import pathlib  # noqa: E402
-
-import pytest  # noqa: E402
-
-from proharness.config import Settings  # noqa: E402
-from proharness.memory.embeddings import HashingEmbedder  # noqa: E402
-from proharness.memory.store import MemoryStore  # noqa: E402
+from proharness.config import Settings
+from proharness.memory.embeddings import HashingEmbedder
+from proharness.memory.store import MemoryStore
 
 # Repo path (the .env file lives here); tests run from a different cwd so the
 # runtime `.env` is never read by `Settings()` during the suite.
@@ -52,6 +40,8 @@ def _hermetic_settings_env(monkeypatch, tmp_path):
             if k.startswith(prefix):
                 monkeypatch.delenv(k, raising=False)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PROHARNESS_EMBED_MODEL", "hashing")
+    monkeypatch.setenv("PROHARNESS_VECTOR_BACKEND", "memory")
     monkeypatch.setattr("proharness.memory.embeddings._st_available", lambda: False)
     for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
         monkeypatch.setenv(name, "1")

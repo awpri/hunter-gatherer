@@ -7,6 +7,7 @@ you want to use.
 | Guide | Start here when you want to… |
 | --- | --- |
 | [Get started](getting-started.md) | Install from source and try a separate fictional library. |
+| [Use the terminal](cli.md) | Ask a question, open a citation or return structured evidence to a script. |
 | [Use the library](usage.md) | Search, explore the graph, inspect quotations and save a collection. |
 | [Connect an assistant](mcp.md) | Give an MCP client access to the library. |
 | [Questions and feature scope](faq.md) | Understand search results, privacy, writing examples and optional AI components. |

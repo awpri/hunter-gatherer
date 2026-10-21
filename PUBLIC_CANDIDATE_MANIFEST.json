@@ -46,7 +46,10 @@
     "tests/test_original_page_mcp_workflow.py",
     "tests/test_visual_regions.py",
     "tests/test_original_page_collections.py",
-    "tests/test_secure_files.py"
+    "tests/test_secure_files.py",
+    "tests/test_optional_dependencies.py",
+    "tests/test_setup.py",
+    "tests/test_terminal.py"
   ],
   "license_file_present": true,
   "hygiene_review_categories": {},
@@ -78,8 +81,8 @@
     },
     {
       "path": ".github/workflows/packaged-demo.yml",
-      "bytes": 1961,
-      "sha256": "8df82a3b5a6ea80e4d2a8ae6368405c3ba22c6261bfcec15507e2190fe3673ed"
+      "bytes": 1976,
+      "sha256": "20f1cc1c7b71c878f35dff2f3c6da909cca52c67ce4197fbd24b24cc3eb3bef4"
     },
     {
       "path": ".gitignore",
@@ -103,8 +106,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4677,
-      "sha256": "3e5e94dd4bd9f209415ccf7747e9c144c3f362295dd74c133eda26e7ef89cd4b"
+      "bytes": 6924,
+      "sha256": "3095a62990b43ce7523c214ea5a8b58cd887889aa8982cf5678128718112ce1e"
     },
     {
       "path": "SECURITY.md",
@@ -117,24 +120,29 @@
       "sha256": "3de6a2f132bdeb1a1beb5818c20f0692d1a8392d498892fe99afbf980d98f97b"
     },
     {
+      "path": "docs/cli.md",
+      "bytes": 5432,
+      "sha256": "c9f7936de556c34549c25237af21a651749904f7e8bcdd69acf3e06067fc7c81"
+    },
+    {
       "path": "docs/demo.md",
-      "bytes": 3266,
-      "sha256": "a2bd10a285ca4877400a472b2ade63e12650b70beef92695e0148b26293a77dc"
+      "bytes": 3443,
+      "sha256": "238c55b302ff66932d6c477891b1d7321b76fe75d1ad215132600e6187db32a0"
     },
     {
       "path": "docs/faq.md",
-      "bytes": 4402,
-      "sha256": "ea5a8423478f40669fd23dd841cc31fc65cb9d8e498848af5eca5fabf1d33739"
+      "bytes": 5386,
+      "sha256": "880357af425fc0e54a608692fefea4293a4a280543cc7ccc1257a633cb7e4afa"
     },
     {
       "path": "docs/getting-started.md",
-      "bytes": 3364,
-      "sha256": "5a34bbeb7b93fdc937b963f0c186f2eb00dee5b61e76258ada22e9eb39b31af0"
+      "bytes": 7182,
+      "sha256": "09e5267e856fa63f3a9392e4e6e47e7c41042d949ab09680082033760b7ba055"
     },
     {
       "path": "docs/index.md",
-      "bytes": 1507,
-      "sha256": "0659d43ad5a4c20ceeac9164e8410563da909e4589a5c29316fbc5db11f22838"
+      "bytes": 1615,
+      "sha256": "713abce03e0c079b978978afc1c4801cb2de46166ec6b2f45ec1c14fd6401c3b"
     },
     {
       "path": "docs/mcp.md",
@@ -143,8 +151,8 @@
     },
     {
       "path": "docs/public-release-guide.md",
-      "bytes": 7980,
-      "sha256": "0d4e60a539e8154ee44b449964e368abe5d45830da35a42cb016e77442899904"
+      "bytes": 8053,
+      "sha256": "8eb7313c9c684343903358aa2371ba6cf5a21f24e422080e085e580f031e5e28"
     },
     {
       "path": "docs/release-provenance-20261014.md",
@@ -153,8 +161,8 @@
     },
     {
       "path": "docs/roadmap.md",
-      "bytes": 11178,
-      "sha256": "e614be8dfd6cd18c22bf4c4ec191bf147d2735df88f6ea55bca0306c6e7cf61e"
+      "bytes": 11883,
+      "sha256": "7ea3d0a1b7a03add4af38cd3e88eed206fdca81dde7fcaa8792a8354cf74400f"
     },
     {
       "path": "docs/usage.md",
@@ -943,8 +951,8 @@
     },
     {
       "path": "proharness/cli.py",
-      "bytes": 45531,
-      "sha256": "552bcd67aab0123a99a8400978c11f33edfcac4001ce167c3e027cf6fa96ffc2"
+      "bytes": 48932,
+      "sha256": "b92faa87d6bb3b5d3772e60d34e4048762e094471a48e16a71dcd36d58583ec1"
     },
     {
       "path": "proharness/config.py",
@@ -1238,8 +1246,8 @@
     },
     {
       "path": "proharness/memory/embeddings.py",
-      "bytes": 10532,
-      "sha256": "53bbd0e7ff24b1baf4d01658e055ef54ee21c9b97eef080abd4eb7fb63dcb8fd"
+      "bytes": 10964,
+      "sha256": "f419610f5fdb995d40e8e897bf0d04e079d7d17baf3e3ca9783fe7eff20342c3"
     },
     {
       "path": "proharness/memory/events.py",
@@ -1518,8 +1526,8 @@
     },
     {
       "path": "proharness/memory/store.py",
-      "bytes": 85155,
-      "sha256": "ad2db5f37e8c02825eff8a6df20d9a5f92672f426262959ceebaf567e3462f6c"
+      "bytes": 85822,
+      "sha256": "9c05abbb5ad07b388429f7fd05271a30228ed4b7c10949f3a863133fc832346e"
     },
     {
       "path": "proharness/memory/table_navigation.py",
@@ -1605,6 +1613,11 @@
       "path": "proharness/operations.py",
       "bytes": 3595,
       "sha256": "7a2207d31159b8a487f486688946bd96235b78b873c0dce20cdd1103763076a4"
+    },
+    {
+      "path": "proharness/optional_dependencies.py",
+      "bytes": 722,
+      "sha256": "d7f1ec49f2579b95731bfe298be32fc5b0b5eb2139dc70f4183a2fd0bbf543c2"
     },
     {
       "path": "proharness/pipelines/__init__.py",
@@ -1792,6 +1805,11 @@
       "sha256": "5c6ace8b8d84a4ccbd301c2bfab3d316edfbc17c8187307a6c402146be02f377"
     },
     {
+      "path": "proharness/setup.py",
+      "bytes": 4321,
+      "sha256": "7e3222a2caed2952a3587719d6b88d0ead340864db3f48374289aa859ad78f04"
+    },
+    {
       "path": "proharness/skills/__init__.py",
       "bytes": 3300,
       "sha256": "9781518c2870b16b8b7ae81ecdf31273b75f40470c26c2e4cf56ce29b04f2ced"
@@ -1800,6 +1818,11 @@
       "path": "proharness/skills/examples/research/SKILL.md",
       "bytes": 1917,
       "sha256": "cc00d900d7bd044248befce66a4d3abf57566eb2494823f18a96f1f1cc57c863"
+    },
+    {
+      "path": "proharness/terminal.py",
+      "bytes": 19455,
+      "sha256": "dedd448122baa67eb10c0fa00acf5915995de78ecc38f42006a72c8bb61e056e"
     },
     {
       "path": "proharness/tools/__init__.py",
@@ -1858,8 +1881,8 @@
     },
     {
       "path": "proharness/voice/tts.py",
-      "bytes": 5494,
-      "sha256": "7b367664e9485b9c91b2fa04bef76dc50e800bd69ff69e0315c0332f03eb3255"
+      "bytes": 5720,
+      "sha256": "7969ab12f86ce65b76ab3a469153ba9ba7dd310e5bc7b98a39f293f4c9f63044"
     },
     {
       "path": "proharness/voice/vad.py",
@@ -1873,8 +1896,8 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 2480,
-      "sha256": "736f10f0a4e89ca470defc651fe2539f54f356ce8b083547a3f1698de4a0d4ec"
+      "bytes": 2606,
+      "sha256": "c052dde06f6a70508147ff79472b697168a5a23529382132d3234e03701018e3"
     },
     {
       "path": "scripts/check_publication_hygiene.py",
@@ -1883,18 +1906,18 @@
     },
     {
       "path": "scripts/export_public_candidate.py",
-      "bytes": 8380,
-      "sha256": "e405527c1b5c6ac90540e54ac8e75f1adb5204b29e924ae7e24fbda622a9fa22"
+      "bytes": 8491,
+      "sha256": "9237b5fcdde5cd6537a1f934eebf07a0ded267a3a49fd53a5e36cb30c4373ba9"
     },
     {
       "path": "scripts/smoke_packaged_demo.py",
-      "bytes": 17306,
-      "sha256": "a51d4b2b38af281df846b8c7dd6e0bc45e1a9c7d844eb5f39325eaf5d8140210"
+      "bytes": 19159,
+      "sha256": "76e599be744523ff61ce71dab7749835a7afad44c452d0b2b420ca5be72a6977"
     },
     {
       "path": "tests/conftest.py",
-      "bytes": 3005,
-      "sha256": "d2261a7be077f4b3f8cb5acaad9714c2ef361dd6afc65474f478a6bbb93abcf7"
+      "bytes": 2559,
+      "sha256": "cc4d9bb1ef32741f43d20e798858f078984f5edb4a75b88007ab18aa25ae7e2e"
     },
     {
       "path": "tests/fixtures/find_subject_v1.json",
@@ -1997,6 +2020,11 @@
       "sha256": "732aeae5945e23deaae9400066981437aef875f0e2ad225fd688c9a243112bb5"
     },
     {
+      "path": "tests/test_optional_dependencies.py",
+      "bytes": 5567,
+      "sha256": "61150f2094010e30c62ec70d2e117ba915c110c1d02edce48362cc55b84a67c0"
+    },
+    {
       "path": "tests/test_original_page_collections.py",
       "bytes": 18055,
       "sha256": "1d3b8117f276e6dcd029e47c05b58d6a38a4df73bdfd16127c631cad0f79be67"
@@ -2042,6 +2070,11 @@
       "sha256": "38243610e6de6b0f0468c5a83ecf0cfc2036ad79d9acf902690ac9fdc11b9b26"
     },
     {
+      "path": "tests/test_setup.py",
+      "bytes": 1660,
+      "sha256": "bca3646d3cc77b88f594e00af0841881eeeaec31b2f4454b735abca1e49b89e0"
+    },
+    {
       "path": "tests/test_simple_library_workflow.py",
       "bytes": 14631,
       "sha256": "13302d1360ef65b69edf4e2f5fc14cc4f2b0ed03f9f1664762bf04a5a198f522"
@@ -2050,6 +2083,11 @@
       "path": "tests/test_simple_search.py",
       "bytes": 9831,
       "sha256": "d44104784d1d3cb424d2fb5aa195ee66a666957b9cbc1e777c3fdcc0df35baf4"
+    },
+    {
+      "path": "tests/test_terminal.py",
+      "bytes": 12184,
+      "sha256": "5542fc3a0cd2569c10329ed6a5f57da6ead38c1757ca61b58a3af214a4795253"
     },
     {
       "path": "tests/test_visual_regions.py",

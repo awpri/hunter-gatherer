@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from proharness.config import Settings
 from proharness.memory.embeddings import Embedder, get_embedder
 from proharness.memory.schemas import Memory, MemoryType, matches_filters
+from proharness.optional_dependencies import OptionalDependencyError
 
 log = logging.getLogger(__name__)
 
@@ -292,14 +293,22 @@ class InMemoryBackend(VectorBackend):
         pass
 
 
+def _qdrant_modules():
+    """Validate the configured optional backend before opening a library."""
+    try:
+        from qdrant_client import QdrantClient, models
+    except ImportError as exc:
+        raise OptionalDependencyError("Qdrant storage", "qdrant", "qdrant-client") from exc
+    return QdrantClient, models
+
+
 class QdrantBackend(VectorBackend):
     """Qdrant over HTTP (typically on the NAS). Uses dense + sparse named
     vectors with RRF fusion. Falls back / raises on connection error; the
     MemoryStore catches and switches to InMemoryBackend."""
 
     def __init__(self, settings: Settings, embedder: Embedder, dim: int):
-        from qdrant_client import QdrantClient, models
-
+        QdrantClient, models = _qdrant_modules()
         self._models = models
         self._client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
         self._collection = settings.qdrant_collection
@@ -469,6 +478,8 @@ class MemoryStore:
                 "for a local in-memory index. The remote collection was not changed."
             )
         self.embedder = embedder or get_embedder(settings)
+        if settings.vector_backend == "qdrant":
+            _qdrant_modules()
         self.importance_scorer = importance_scorer
         self._sqlite = sqlite3.connect(settings.sqlite_uri(), uri=True, check_same_thread=False)
         self._sqlite.row_factory = sqlite3.Row
@@ -952,6 +963,10 @@ class MemoryStore:
             b = QdrantBackend(self.settings, self.embedder, dim=self.embedder.dim)
             log.info("using Qdrant backend at %s", self.settings.qdrant_url)
             return b
+        except OptionalDependencyError:
+            # Installing a smaller dependency set must not select a different
+            # backend than the one configured by an existing library.
+            raise
         except Exception as e:
             log.warning("Qdrant unavailable (%s); using in-memory vector backend", e)
             return InMemoryBackend(self.embedder)

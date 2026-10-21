@@ -38,7 +38,12 @@ class OpenAITTS:
         self.voice = voice
 
     def speak(self, text: str) -> None:
-        from openai import OpenAI
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            from proharness.optional_dependencies import OptionalDependencyError
+
+            raise OptionalDependencyError("OpenAI speech", "tts-openai", "openai") from exc
 
         client = OpenAI(api_key=self.api_key)
         resp = client.audio.speech.create(model="tts-1", voice=self.voice, input=text)

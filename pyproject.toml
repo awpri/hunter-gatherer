@@ -19,12 +19,6 @@ dependencies = [
     "rich>=13.7",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
-    # Cloud model SDKs
-    "openai>=1.30",
-    "anthropic>=0.25",
-    # Memory: vector store + embeddings
-    "qdrant-client>=1.10",
-    "sentence-transformers>=3.0",
     # MCP server (tool interface)
     "mcp>=2.0,<3",
     # UI server
@@ -39,6 +33,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+semantic = [
+    "sentence-transformers>=3.0",  # local semantic embeddings and optional reranker
+]
+qdrant = [
+    "qdrant-client>=1.10",  # optional remote vector backend
+]
+tts-openai = [
+    "openai>=1.30",  # only OpenAI speech needs the SDK; chat uses httpx
+]
 document-view = [
     "pypdfium2>=5.14,<6",  # local render-only worker; no OCR/model downloads
     "Pillow>=12.3,<13",    # bounded PNG encoding inside the worker
@@ -76,6 +79,7 @@ Repository = "https://github.com/awpri/hunter-gatherer"
 Issues = "https://github.com/awpri/hunter-gatherer/issues"
 
 [project.scripts]
+hunt = "proharness.cli:main"
 proharness = "proharness.cli:main"
 proharness-mcp = "proharness.mcp.server:main"
 proharness-ui = "proharness.server.desktop:main"

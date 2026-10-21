@@ -767,10 +767,59 @@ def cmd_demo(args, _settings=None):
 
 # ── arg parsing ───────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="proharness", description="A research-grounded AI harness.")
+    from pathlib import Path
+
+    from proharness.terminal import cmd_evidence
+
+    def bounded_integer(lower, upper):
+        def parse(value):
+            try:
+                parsed = int(value)
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError("must be an integer") from exc
+            if not lower <= parsed <= upper:
+                raise argparse.ArgumentTypeError(f"must be between {lower} and {upper}")
+            return parsed
+        return parse
+
+    def question(value):
+        if not value.strip() or len(value) > 4000:
+            raise argparse.ArgumentTypeError("question must contain 1 to 4000 characters")
+        return value.strip()
+
+    program = "hunt" if Path(sys.argv[0]).stem == "hunt" else "proharness"
+    p = argparse.ArgumentParser(prog=program, description="hunter/gatherer — a local evidence library.")
     p.add_argument("--verbose", "-v", action="store_true", help="enable debug logging")
     p.add_argument("--workdir", default=".", help="working directory for file tools")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    for name, help_text in (("ask", "find source quotes for a question (no generated answer)"),
+                            ("open", "read exact cited sources or their surrounding context")):
+        command = sub.add_parser(name, help=help_text)
+        library = command.add_mutually_exclusive_group()
+        library.add_argument("--database", metavar="FILE", help="existing library database; defaults to configured store")
+        library.add_argument("--demo-library", metavar="DIR", help="isolated fictional demo; ignores personal configuration")
+        command.add_argument("--json", action="store_true", help="lossless structured output for scripts and AI; diagnostics use stderr")
+        command.add_argument("--max-tokens", type=bounded_integer(512, 16384), default=4096,
+                             help="approximate output budget per page, 512–16384 (default: 4096)")
+        command.add_argument("--include-sensitive", action="store_true", help="explicitly include private records")
+        if name == "ask":
+            command.add_argument("question", type=question, help="natural-language question in quotes")
+            command.add_argument("--pages", type=bounded_integer(1, 20), default=1,
+                                 help="maximum search pages to retrieve in this session (default: 1)")
+        else:
+            command.add_argument("refs", nargs="+", metavar="CITATION", help="exact quoted citation(s) from Ask or MCP")
+            command.add_argument("--view", choices=["text", "context", "outline"], default="text")
+            command.add_argument("--offset", type=bounded_integer(0, 1000000), default=0,
+                                 help="section offset for outline view")
+        command.set_defaults(func=cmd_evidence)
+
+    setup = sub.add_parser("setup", help="inspect optional capabilities and show install commands; downloads nothing")
+    setup.add_argument("--json", action="store_true", help="structured capability report")
+    def setup_command(args, _settings):
+        from proharness.setup import cmd_setup
+        return cmd_setup(args)
+    setup.set_defaults(func=setup_command)
 
     demo = sub.add_parser("demo", help="create or serve an isolated fictional offline library")
     demo_sub = demo.add_subparsers(dest="demo_action", required=True)
@@ -919,13 +968,21 @@ def main(argv: list[str] | None = None) -> int:
     # Apply workdir from top-level flag if the subcommand supports it.
     try:
         # Demo startup bypasses both cached settings and user environment/.env.
-        settings = None if args.cmd == "demo" else get_settings()
+        isolated = args.cmd in {"demo", "setup"} or bool(getattr(args, "demo_library", None))
+        settings = None if isolated else get_settings()
         return args.func(args, settings) or 0
     except KeyboardInterrupt:
         return 130
+    except BrokenPipeError:
+        # Normal when a consumer such as head closes a pipeline early.
+        return 0
     except Exception as e:
-        err_console.print(f"[red]error:[/red] {type(e).__name__}: {e}")
-        if args.verbose:
+        if getattr(args, "json", False):
+            print(json.dumps({"error": {"type": type(e).__name__, "message": str(e)}}), file=sys.stderr)
+        else:
+            from proharness.terminal import safe_text
+            err_console.print(f"error: {type(e).__name__}: {safe_text(e)}", markup=False, highlight=False)
+        if args.verbose and not getattr(args, "json", False):
             raise
         return 1
 

@@ -3,8 +3,9 @@
 Create a dedicated demo with an explicit target directory:
 
 ```sh
-proharness demo create /absolute/path/lantern-demo
-proharness demo serve /absolute/path/lantern-demo --port 8767
+hunt demo create /absolute/path/lantern-demo
+hunt ask "Is the Lantern pilot real?" --demo-library /absolute/path/lantern-demo
+hunt demo serve /absolute/path/lantern-demo --port 8767
 ```
 
 The target must be absent or empty. Creation refuses an occupied directory,
@@ -43,8 +44,9 @@ Use Python 3.11 or later, a dedicated virtual environment, and `python -m pip
 install .` from a source checkout. For a built wheel, install that wheel instead.
 The bundled web interface and three demo Markdown sources ship inside the package;
 Node is not needed to run them. This release requires MCP SDK 2.x, matching the
-runtime APIs it imports. Python dependencies can be substantial; no minimal
-library-only dependency extra is claimed yet.
+runtime APIs it imports. The base install does not require neural embeddings,
+Torch, Qdrant or cloud SDKs. See [optional features](getting-started.md#optional-features)
+for capabilities that require additional packages and setup.
 
 Run the packaged smoke script against the exact installed artifact to verify
 Find → Open → saved collection → restart, backup/restore and UI assets. See

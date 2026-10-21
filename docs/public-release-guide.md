@@ -20,8 +20,9 @@ Use Python 3.11 or newer and a **dedicated virtual environment** from this direc
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install '.[dev,document-view]'
-.venv/bin/proharness demo create ./demo-library
-.venv/bin/proharness demo serve ./demo-library --port 8767
+.venv/bin/hunt demo create ./demo-library
+.venv/bin/hunt ask "Is the Lantern pilot real?" --demo-library ./demo-library --json
+.venv/bin/hunt demo serve ./demo-library --port 8767
 ```
 
 Open http://127.0.0.1:8767/. On Windows, virtual-environment executables live in
@@ -68,8 +69,9 @@ sources to save a collection with notes, review decisions and unresolved questio
   the library directly. Missing text can also reflect extraction or access limits.
   Result details retain the search diagnostics for investigating these cases.
 
-This is developed separately from ProHarness. Internal Python module, command and
-MCP names remain `proharness` for compatibility. Do not install both projects in
+This is developed separately from ProHarness. Internal Python modules, older
+commands and MCP names retain `proharness` for compatibility; `hunt` is the h/g
+entry point. Do not install both projects in
 the same virtual environment. The explicit demo launcher above keeps data and
 configuration isolated; ordinary `proharness serve` reads normal ProHarness
 configuration and is not the separate demo launcher.
@@ -95,9 +97,9 @@ voice require additional setup and are outside this demo's validation scope.
 ```bash
 .venv/bin/python -m pytest tests
 .venv/bin/python scripts/smoke_packaged_demo.py
-.venv/bin/proharness backup create ./demo-backup --database ./demo-library/demo.db
-.venv/bin/proharness backup verify ./demo-backup
-.venv/bin/proharness backup restore ./demo-backup --database ./restored-demo.db
+.venv/bin/hunt backup create ./demo-backup --database ./demo-library/demo.db
+.venv/bin/hunt backup verify ./demo-backup
+.venv/bin/hunt backup restore ./demo-backup --database ./restored-demo.db
 ```
 
 Backup and restore require explicit paths; restore refuses an occupied target.
@@ -107,13 +109,12 @@ persistence, backup/recovery and export boundaries. They are a bounded subset of
 development tests. Private evaluation corpora and evaluation modules are excluded;
 benchmark commands requiring those modules are outside this candidate's scope.
 
-The inherited ProHarness packaged-demo matrix passed on macOS and Linux with
-Python 3.11–3.14; its Windows cells failed. That is a prior baseline, not evidence
-that this modified hunter/gatherer release passed the matrix. Check this repo's
-CI results before relying on a platform. Base installation includes cloud SDKs
-and sentence-transformers/Qdrant dependencies even for the hashing demo; no provider
-key is required, but initial downloads can be substantial. There is no Python
-lockfile; record resolved versions for reproducible release checks.
+The [packaged-demo matrix](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)
+tests Windows, macOS and Linux with Python 3.11–3.14. Inspect the exact commit's
+results before relying on a release. The base install excludes neural embedding
+packages, Qdrant and cloud SDKs; those capabilities have optional extras. Validate
+a clean base environment as well as the extras included in a release. There is
+no Python lockfile; record resolved versions for reproducible release checks.
 
 ## Rebuild the interface
 
@@ -135,8 +136,8 @@ python scripts/check_publication_hygiene.py ../fresh-public-candidate
 ```
 
 The destination must be new or empty and outside the development repository.
-The manifest records selected file hashes and sizes. The exported README is this
-guide with local links adjusted. The exporter excludes Git history, configuration,
+The manifest records selected file hashes and sizes. The exporter preserves the
+repository README and includes this verification guide separately. It excludes Git history, configuration,
 credentials, agent state, databases, private corpus files and unreviewed tests/docs.
 Use a fresh Git repository from that export; do not publish development history.
 The [provenance record](release-provenance-20261014.md) describes the review boundary.

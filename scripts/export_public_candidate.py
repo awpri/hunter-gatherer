@@ -38,11 +38,13 @@ PUBLIC_TESTS = (
     "tests/test_original_page_mcp_workflow.py", "tests/test_visual_regions.py",
     "tests/test_original_page_collections.py",
     "tests/test_secure_files.py",
+    "tests/test_optional_dependencies.py", "tests/test_setup.py", "tests/test_terminal.py",
 )
 PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json",)
 PUBLIC_DOCS = (
     "docs/public-release-guide.md", "docs/release-provenance-20261014.md", "docs/visual-regions.md",
     "docs/index.md", "docs/getting-started.md", "docs/usage.md", "docs/mcp.md",
+    "docs/cli.md",
     "docs/faq.md", "docs/roadmap.md", "docs/assets/wordmark.svg", "CONTRIBUTING.md", "SECURITY.md",
     ".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml",
     ".github/ISSUE_TEMPLATE/config.yml", ".github/pull_request_template.md",

@@ -4,9 +4,9 @@ Default: BAAI/bge-small-en-v1.5 (384-dim) via sentence-transformers, run
 in-process (not over the LAN) for lowest per-call latency. Research finding:
 embedding a single query is CPU-bound, so co-locate it with the agent runtime.
 
-A lightweight hashing fallback is provided so the harness runs before
-sentence-transformers is installed; it's decent for the tool-selector's
-top-k but should be replaced for real semantic memory recall.
+A lightweight hashing embedder is available only through explicit configuration
+for offline demos and tests. Missing semantic dependencies never select a
+different embedding model for an existing library.
 
 Sparse vectors (idea #1, 2026-07-31): the Embedder protocol has an optional
 ``embed_sparse`` method. When the embedder supplies learned sparse vectors
@@ -19,6 +19,7 @@ instead of decorative.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import math
 import re
 import threading
@@ -27,6 +28,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from proharness.config import Settings
+from proharness.optional_dependencies import OptionalDependencyError
 
 
 @dataclass
@@ -91,7 +93,12 @@ class SentenceTransformerEmbedder:
     def _load_locked(self):
         if self._model is None:
             # Imported lazily; sentence-transformers is a heavy dep.
-            from sentence_transformers import SentenceTransformer
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as exc:
+                raise OptionalDependencyError(
+                    "Semantic embeddings", "semantic", "sentence-transformers",
+                ) from exc
 
             self._model = SentenceTransformer(self._model_name)
             # Newer sentence-transformers renamed this method; support both.
@@ -189,7 +196,7 @@ class SentenceTransformerEmbedder:
 
 
 class HashingEmbedder:
-    """Cheap fallback embedder: hashed character n-grams → sparse-ish dense vec.
+    """Explicit demo embedder: hashed character n-grams → sparse-ish dense vec.
 
     Not semantically meaningful, but deterministic and good enough to exercise
     the recall/tool-selection code paths before sentence-transformers is
@@ -240,22 +247,22 @@ def _tokens(text: str) -> list[str]:
 
 
 def _st_available() -> bool:
-    """True if sentence-transformers is genuinely importable."""
-    try:
-        import sentence_transformers  # noqa: F401
+    """Check installation without importing Torch or loading model weights.
 
-        return True
-    except Exception:
-        return False
+    Dependency/import failures from an installed package are reported when it
+    is loaded; they must not turn a semantic library into a hashing library.
+    """
+    return importlib.util.find_spec("sentence_transformers") is not None
 
 
 def get_embedder(settings: Settings | None = None) -> Embedder:
-    """Build the configured embedder. Falls back to HashingEmbedder if
-    sentence-transformers isn't importable (e.g. during tests / first run)."""
+    """Build the configured embedder without silently changing its identity."""
     settings = settings or Settings()
     # Explicit offline demonstration mode; do not probe/import model packages.
     if settings.embed_model == "hashing":
         return HashingEmbedder(dim=384)
     if _st_available():
         return SentenceTransformerEmbedder(settings.embed_model)
-    return HashingEmbedder(dim=384)
+    raise OptionalDependencyError(
+        "Semantic embeddings", "semantic", "sentence-transformers",
+    )

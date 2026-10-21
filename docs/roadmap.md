@@ -1,8 +1,8 @@
 # Proposed direction
 
-**Status: product proposal, not a release commitment.** This describes a smaller
-default experience and optional extensions. It does not claim the proposed UI,
-dependency split or integrations already exist.
+**Status: current boundaries and proposed next steps, not a release commitment.**
+The terminal Ask/Open workflow and optional dependency split are implemented.
+The voice UI, generated summaries and distribution channels below remain proposals.
 
 hunter/gatherer's focus is a question, its sources, and a usable handoff to an AI
 assistant. The graph and search bar remain the main workspace. Extra capabilities
@@ -14,6 +14,7 @@ should help that workflow without making people operate an agent control panel.
 | --- | --- | --- |
 | Evidence search, graph, original sources, history and collections | Available in the current library UI and library API. | **Core.** Improve retrieval, source navigation and accessible interaction before adding another workspace. |
 | MCP connection | The library profile exposes Find, Open, Memory, Collection, Import and Status. | **Core.** Let an existing assistant reason over inspected sources and write back deliberate memories or collections. |
+| Terminal evidence workflow | `hunt ask` and `hunt open` provide readable results and structured JSON; `hunt setup` reports optional capabilities. | **Core.** Keep terminal, browser and MCP source handling consistent, with explicit library selection and useful automation output. |
 | Writing examples | Collections store style examples separately from evidence references; exports retain that distinction. | **Keep within collections.** Use “Writing example” and a short explanation of tone/style. This is not recorded audio or proof of a claim. |
 | Speech input | The CLI has press-to-talk recording, transcription and an agent response. Speech components exist; there is no microphone flow in the current library UI. | **Optional extension.** A microphone beside the existing search input should transcribe into editable text, then use the ordinary Ask action. |
 | Read aloud | Local and cloud TTS implementations and sentence-chunk helpers exist in the voice code. | **Optional extension.** A play/stop action on a quote or generated summary. Preserve keyboard and screen-reader access; do not start playback automatically. |
@@ -66,17 +67,22 @@ configuration boundaries rather than relying on hidden menu entries.
 
 ## Reduce installation weight
 
-The current base dependencies include `sentence-transformers`, `qdrant-client`,
-`openai` and `anthropic`, even for the isolated demo. Voice is already separated
-into the `voice` extra, and local speech synthesis into `tts`. Original PDF
-rendering, OCR recovery and the desktop shell also have separate extras.
+The base install excludes `sentence-transformers`, `qdrant-client` and cloud
+SDKs. Neural embeddings use the `semantic` extra; a configured Qdrant backend
+uses `qdrant`; OpenAI speech output uses `tts-openai`. Existing cloud chat
+integrations use the shared HTTP client. Voice, local speech synthesis, original
+PDF rendering, OCR recovery and the desktop shell also have separate extras.
 
-A useful packaging follow-up is to evaluate separate semantic-search, vector
-backend and AI-provider extras, while retaining an easy supported installation
-for everyday users. This requires checking imports, first-run setup, capability
-errors and existing stores before changing requirements. Hashing embeddings make
-the fictional demo deterministic; they are not a substitute for a production
-semantic-search model.
+`hunt setup` reports installed packages and installation hints without loading a
+library, downloading weights or contacting a provider. pip or uv handles package
+resolution and downloads. Model downloads and external services remain explicit
+capability-specific setup. Hashing embeddings make the fictional demo
+deterministic; they are not a substitute for a production semantic-search model.
+
+The next distribution step is a versioned public release, followed by a maintained
+Homebrew tap with verified artifacts and dependency resources. A package-index
+release should use the final h/g package identity to avoid confusion with the
+transitional `proharness` distribution. Neither channel is published yet.
 
 The expensive complexity is mandatory downloads, configuration and maintenance
 for unused capabilities. A small source module behind an optional, tested API is
@@ -90,9 +96,9 @@ not automatically a problem.
 2. **Complete the rename and migrate deliberately:** move public and internal
    interfaces to h/g names, then validate a copy of an existing library before
    explicitly switching the active installation. Follow the sequence below.
-3. **Installation boundaries:** measure the dependency footprint, separate
-   optional capabilities where safe, and document supported versus experimental
-   paths. Keep existing environments and stored libraries compatible.
+3. **Distribution and setup:** build on the optional dependency split and setup
+   report. Measure clean-install costs, publish versioned artifacts and verify
+   installer upgrades. Keep existing environments and stored libraries compatible.
 4. **Small optional voice integration:** editable search dictation first;
    read-aloud second if useful. Validate actual microphone/audio devices and
    cancellation rather than assuming the Python components complete the UI.
