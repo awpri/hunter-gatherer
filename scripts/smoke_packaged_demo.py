@@ -28,6 +28,38 @@ from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 
+def stop_server(process, port):
+    """Stop only this owned server tree and verify its listener is gone."""
+    tree_exit_code = None
+    if process.poll() is None:
+        if os.name == "nt":
+            # A Windows venv launcher can own a separate Python child. Killing
+            # only the launcher does not close the child's SQLite handles.
+            killed = subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                    capture_output=True, text=True, timeout=15)
+            # A launcher may exit after its child is killed but before taskkill
+            # visits it. Record the code; require all cleanup postconditions.
+            tree_exit_code = killed.returncode
+            process.wait(timeout=10)
+        else:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+    assert process.poll() is not None, "Owned server process did not exit"
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                pass
+        except ConnectionRefusedError:
+            return tree_exit_code
+        time.sleep(0.1)
+    raise RuntimeError("Owned server listener remained open after cleanup")
+
+
 def check_packaged_assets(http, base_url):
     """Follow local HTML assets and CSS font references, with a finite cap."""
     html = http.get(base_url + "/")
@@ -374,13 +406,11 @@ def main():
                     print((root / f"server-{number}.log").read_text(), file=sys.stderr)
                     raise
                 finally:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=5)
-                    assert process.poll() is not None
+                    tree_exit_code = stop_server(process, port)
+                    record.setdefault("server_shutdowns", []).append({"startup": number,
+                        "process_exited": True, "listener_closed": True,
+                        "method": "owned_process_tree" if os.name == "nt" else "terminate_wait",
+                        "tree_cleanup_exit_code": tree_exit_code})
         assert not sentinel.exists(), "Ambient store was accessed"
     record.update(no_ambient_store_created=True, temporary_servers_stopped=True)
     serialized = json.dumps(record, indent=2) + "\n"

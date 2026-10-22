@@ -1945,13 +1945,13 @@
     },
     {
       "path": "scripts/smoke_packaged_demo.py",
-      "bytes": 19652,
-      "sha256": "4a828d6e553210d8e8ca942279c24bcac62bc3152ce3a1971275571fa5caa523"
+      "bytes": 21148,
+      "sha256": "7c61d902e38039c592c785878cbea1fff5c47e9aa3b378be034ec084ce91e25d"
     },
     {
       "path": "scripts/smoke_personal_library.py",
-      "bytes": 11426,
-      "sha256": "590b9d60b1ed1ba16e13960924001386521c569cd7a7a4b88d6501e045b73c44"
+      "bytes": 12923,
+      "sha256": "22c91a7bee63aeea09e8bdcef75803cb19309b216d05a0274ede74f4807b2c7c"
     },
     {
       "path": "tests/conftest.py",
