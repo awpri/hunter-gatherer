@@ -1950,8 +1950,8 @@
     },
     {
       "path": "scripts/smoke_personal_library.py",
-      "bytes": 11096,
-      "sha256": "16ec1d04f1111bd6359f16551b7991f76cbcc930b7fabe79ec0ca5d7abdc8e04"
+      "bytes": 11426,
+      "sha256": "590b9d60b1ed1ba16e13960924001386521c569cd7a7a4b88d6501e045b73c44"
     },
     {
       "path": "tests/conftest.py",

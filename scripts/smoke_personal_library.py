@@ -136,7 +136,11 @@ def main():
             url = f"http://127.0.0.1:{port}"
             logfile = root / f"server-{startup}.log"
             with logfile.open("w", encoding="utf-8") as log:
-                process = subprocess.Popen([str(hunt), "serve", str(library), "--port", str(port)], cwd=root,
+                # Own the Python server directly: on Windows, terminating a
+                # console-script wrapper can leave its child holding SQLite.
+                # Finite CLI calls above still exercise the installed hunt entrypoint.
+                process = subprocess.Popen([sys.executable, "-I", "-B", "-m", "hunter_gatherer.cli",
+                                            "serve", str(library), "--port", str(port)], cwd=root,
                                            env=env, stdout=log, stderr=log)
                 try:
                     with httpx2.Client(trust_env=False, timeout=2) as http:
