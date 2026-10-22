@@ -23,7 +23,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../proharness/server/library_static",
+    outDir: "../hunter_gatherer/server/library_static",
     emptyOutDir: true,
   },
 });

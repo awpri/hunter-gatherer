@@ -3,32 +3,37 @@
 ## Is Ask a chatbot?
 
 No. Ask retrieves quotations and saved records from your library. It does not
-generate a synthesized answer. Use the exact sources yourself, or connect an
-assistant through [MCP](mcp.md) to reason over them.
+generate a synthesized answer. Read the sources yourself, or connect an assistant
+through [MCP](mcp.md) to reason over them.
 
 ## What does a highlighted sentence mean?
 
-It is selected to help you scan for text related to your question. The emphasis
-does not verify the statement. Expand the passage and inspect its source for
-qualifications, dates and context.
+It is an exact excerpt selected by a relevance heuristic to help you scan. The
+selection does not verify a statement or prove that it answers your question.
+Expand the passage and inspect qualifications, dates and surrounding context.
+
+Some rules recognize question types. For example, an authenticity question such
+as “Is this real?” can prioritize words such as “fictional” and “invented.” That
+is a deliberate matching rule, not general reasoning. Keyword and semantic
+retrieval can both return the right document with an unhelpful passage; check the
+source rather than treating its rank or highlighting as a verdict.
 
 ## What does Copy include?
 
-Loaded source passages and saved memories, with their citations. Copying a
-selection includes only the selected sources from those results. The exported
-text retains the full returned passage, not just the shortened on-screen excerpt.
+Loaded source passages and saved memories, with citations. Copying a selection
+includes only the selected sources. The export retains the full returned passage,
+not just its shortened on-screen excerpt. No collection is required.
 
-File titles, relationship hints and generated annotations are not included as
-quotations. Access is checked again before copying; the interface reports text
-that is withheld, unavailable or omitted by the output limit. No collection is
-required.
+File titles, relationship hints and generated annotations are not quotations.
+Access is checked again before copying, and withheld/unavailable text or output
+omissions are reported.
 
 ## Does an empty result mean the information is missing?
 
-Not necessarily. Retrieval and delivery are bounded, and extraction may not
-cover all the content in a file. Load more when available, change the question,
-or inspect the original. A result cannot establish that a claim is absent from
-the entire library.
+Not necessarily. Search and output are bounded, extraction can omit content, and
+privacy settings can withhold records. Load more when available, change the
+question, or inspect the original. A search result cannot establish that a claim
+is absent from the entire library.
 
 ## Why show related files or connected memories?
 
@@ -39,96 +44,102 @@ A recorded connection is not independent corroboration.
 ## What is a writing example? Is that the voice feature?
 
 A writing example is a passage an assistant can use as a reference for wording,
-tone or style. Earlier interfaces called these “voice examples”; the underlying
-collection schema still uses `voice_examples`. They are separate from factual
-evidence and separate from microphone input or spoken output.
+tone or style. The collection schema calls these `voice_examples`. They remain
+separate from factual evidence, microphone input and spoken output.
 
 ## What happened to voice and model routing?
 
-The repository retains the inherited Python agent runtime, audio components and
-model-routing code. They are not connected to the current quote-first web
-workflow. Optional extras include speech input (`voice`) and speech output
-(`tts`); they require additional setup and are outside the packaged fictional
-demo's validation scope.
+The inherited agent runtime, audio components and model-routing code remain
+available for advanced use. They are not connected to the default quote-first
+web workflow. Speech input (`voice`) and output (`tts` or `tts-openai`) require
+optional packages and additional setup.
 
-An external assistant connected through MCP uses its own model configuration.
-h/g's router applies when h/g runs the agent itself. The presence of routing,
-streaming or hands-free components in the source is not a claim that a finished
-web feature is available.
-
-See the [roadmap](roadmap.md) for the proposed integration order and which
-components should remain optional.
+An MCP assistant uses its own model configuration. h/g's router applies when h/g
+runs the agent itself. Existing streaming, scheduling or audio modules do not
+imply a finished browser feature. `hunt advanced-serve` retains the experimental
+agent server separately from ordinary library startup. See the [roadmap](roadmap.md).
 
 ## Do I need to download every dependency or model?
 
-No. The base install runs the fictional library, web UI, terminal search and MCP
-without neural embedding models, speech packages, OCR or cloud SDKs. `hunt setup`
-shows optional capabilities and install hints without downloading anything. Use
-pip or uv in the h/g environment to add only the extras you need; see
-[setup](getting-started.md#optional-features).
+No. The base install runs personal keyword libraries, the fictional demo, web UI,
+terminal search and MCP without neural embeddings, speech packages, OCR or cloud
+SDKs. `hunt setup` shows installed capabilities and install hints; it downloads
+nothing. pip or uv manages optional packages in your environment.
 
-An existing semantic library still needs its configured embedding model. Missing
-packages must not silently change that model or replace it with demo hashing.
+For a new neural library, install the `semantic` extra, then use `hunt init DIR
+--semantic`. Initialization uses cached weights unless you explicitly add
+`--download-model`. An existing semantic library needs its original model;
+missing packages or weights must not silently replace it with hashing.
 
-## How do SQLite, neural embeddings and Qdrant fit together?
+## How do SQLite, embeddings and Qdrant fit together?
 
-SQLite stores the library's records, imported passages, metadata and keyword
-search index. A neural embedding model converts text into numerical vectors so
-search can compare meaning as well as words. The model is a computation step,
-not a replacement database.
+| Part | Job in h/g |
+| --- | --- |
+| SQLite | Stores records, imported passages, source metadata and keyword indexes. |
+| Embedding model | Converts text into vectors so search can compare meaning as well as words. |
+| Qdrant | Optional external index for memory vectors. It does not replace the source records. |
 
-Qdrant is an optional index for memory vectors. Semantic search can work without
-it, using h/g's local vector backend. The current document archive and its passage
-search remain on the SQLite path even when memory vectors use Qdrant. These are
-parts of the same library, not competing choices for where all your data lives.
+The default personal library uses keyword retrieval and lightweight deterministic
+hashing. Hashing is not a neural semantic model. Optional semantic search can run
+without Qdrant, using the local vector backend. Document passages stay on the
+SQLite search path even when the memory-vector backend uses Qdrant.
+
+The Lantern demo's successful “Is the pilot real?” example uses keyword retrieval
+and excerpt selection. It does not demonstrate neural understanding or Qdrant.
 
 ## Does every terminal question need to load the model again?
 
-A standalone local Ask command starts its own process. For repeated questions,
-use `hunt ask "question" --server http://127.0.0.1:8767` against a running h/g
-library server. The server keeps its configured model instance available across
-requests; the CLI does not load another model. The fictional demo uses hashing,
-so it has no neural model to load. See [server usage](cli.md#reuse-a-running-library).
+A standalone local Ask starts its own process. For repeated questions, use
+`hunt ask "question" --server http://127.0.0.1:8767` against a running library.
+The server reuses its configured model; the CLI does not load another copy.
+Keyword and demo libraries have no neural model to load.
 
 ## Can an agent use the command line instead of MCP?
 
-Yes. `hunt ask "question" --json` returns structured evidence, and `hunt open`
-reads a citation. Both use the same source-reading and access rules as the
-library. Pass `--demo-library DIR` for the isolated demo, or `--server URL` to use
-an already running local library. The [terminal guide](cli.md) covers output
-limits and exit codes; MCP remains useful for an ongoing session.
+Yes. `hunt ask "question" --library DIR --json` returns structured evidence;
+`hunt open CITATION --library DIR --json` reads an exact source. `--json` changes
+presentation only. Use `--server URL` to reuse an existing process. See the
+[terminal guide](cli.md) for limits and exit codes.
 
 ## Is everything local?
 
-The dedicated fictional demo uses local SQLite and deterministic hashing
-embeddings. Its create/serve commands ignore ambient configuration, make no model
-provider calls and download no model weights. Installing dependencies uses the
-network. A connected assistant may send the sources it reads to its own provider.
+Personal libraries created by `hunt init` use local SQLite and an in-process
+vector backend. Semantic libraries use a local embedding model; downloading it
+requires the explicit initialization flag. Library startup ignores ambient cloud
+credentials. Demo startup is also isolated. Installing packages uses the network.
 
-Other runtime configurations can use cloud model services or external stores.
-The isolated demo does not configure or validate those integrations.
+An assistant connected through MCP may send returned sources to its provider.
+Advanced runtime settings can configure cloud services or external databases;
+those are separate from the default directory-based workflow.
 
-## What do the privacy controls do?
+## What do privacy controls do?
 
 Sensitive records require an explicit visibility choice when read. Exports
-recheck current source access. These controls help govern what the library
-returns; they cannot retract information already copied elsewhere.
-
+recheck access. These controls cannot retract information already copied elsewhere.
 Forgetting a memory is recoverable removal, not erasure of every historical
-record or backup. Manage retained backups separately. See
-[release verification](public-release-guide.md) for backup and restore commands.
+record or backup. Keep and manage backups separately.
 
-## Why are some names still ProHarness?
+## What changed from ProHarness?
 
-The product, interface and `hunt` command are hunter/gatherer, while the internal
-Python package, older commands and MCP names retain `proharness` for compatibility. Use separate virtual
-environments for h/g and ProHarness. The original live ProHarness library is not
-part of this repository or the fictional demo.
+The public namespace is now consistent:
 
-## Is there a published package or a stable release?
+| Interface | Current name |
+| --- | --- |
+| Distribution / Python import | `hunter-gatherer` / `hunter_gatherer` |
+| Commands | `hunt`, `hunt-mcp`, `hunt-ui` |
+| MCP tools / resources | `hg_*` / `hg://` |
+| General settings | `HG_` variables and `~/.hunter-gatherer/config.env` |
 
-Source installation is the documented path. There is no h/g PyPI or Homebrew release yet.
-This is an early project; inspect the
-[packaged-install CI results](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)
-for your platform. The demo tests cover a defined source and packaging boundary,
-not every inherited runtime component.
+`HG_CONFIG_FILE` can select another configuration file. A working-directory
+`.env`, `PROHARNESS_` settings, old auth cookies and the original live library are
+not picked up automatically. Older MCP client instructions must use the new tool
+names. Saved citation IDs, historical collections and compact exports have
+compatibility readers. See [migration boundaries](roadmap.md#compatibility-and-migration).
+
+## Is this a stable release?
+
+**0.1.0a1 is a public alpha**, distributed through GitHub release assets and a
+versioned source tag. There is no PyPI or Homebrew release yet. Check the exact
+release's notes and [packaged-install CI](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml).
+Tests cover a defined source boundary and synthetic workflows; they do not
+establish universal retrieval accuracy or validate every inherited runtime feature.

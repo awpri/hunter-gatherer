@@ -6,21 +6,21 @@ from types import SimpleNamespace
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
-from proharness.mcp.server import build_server
-from proharness.mcp.tools import Harness
-from proharness.memory.schemas import Memory
+from hunter_gatherer.mcp.server import build_server
+from hunter_gatherer.mcp.tools import Harness
+from hunter_gatherer.memory.schemas import Memory
 
 
 @pytest.fixture
 def reference_server(store, settings):
     harness = Harness(loop=SimpleNamespace(), store=store, cost=SimpleNamespace(), settings=settings)
-    server, _ = build_server(harness=harness)
-    assert any(t.name == "proharness_fetch" for t in asyncio.run(server.list_tools()))
+    server, _ = build_server(harness=harness, tool_profile="full")
+    assert any(t.name == "hg_fetch" for t in asyncio.run(server.list_tools()))
     return server
 
 
 def invoke(server, arguments):
-    result = asyncio.run(server.call_tool('proharness_fetch', arguments))
+    result = asyncio.run(server.call_tool('hg_fetch', arguments))
     assert not result.is_error
     texts = [c.text for c in result.content if c.type == 'text']
     return json.loads(texts[0])
@@ -28,7 +28,7 @@ def invoke(server, arguments):
 
 def test_reference_sdk_registration_schema(reference_server):
     tools = asyncio.run(reference_server.list_tools())
-    tool = next(t for t in tools if t.name == 'proharness_fetch')
+    tool = next(t for t in tools if t.name == 'hg_fetch')
     schema = tool.input_schema
     assert schema['required'] == ['refs']
     refs = schema['properties']['refs']
@@ -64,7 +64,7 @@ def test_reference_sdk_call_defaults_and_read_only(reference_server, store):
 def test_reference_sdk_rejects_contract_violations(reference_server, arguments):
     # SDK validation can raise or produce an MCP error depending on SDK version.
     try:
-        result = asyncio.run(reference_server.call_tool('proharness_fetch', arguments))
+        result = asyncio.run(reference_server.call_tool('hg_fetch', arguments))
     except (ValueError, TypeError, ToolError):
         return
     assert result.is_error
@@ -72,11 +72,11 @@ def test_reference_sdk_rejects_contract_violations(reference_server, arguments):
 
 @pytest.mark.parametrize('nrefs', [1, 32])
 def test_sdk_serialized_budget_includes_store(reference_server, store, nrefs):
-    from proharness.mcp.tools import serialize_result
+    from hunter_gatherer.mcp.tools import serialize_result
     memory = store.add(Memory(text='🧪'*4000))
     short = store.add(Memory(text='small source'))
     refs = ([memory.id, short.id, '0'*32, 'bad'] * 8)[:nrefs]
-    raw = asyncio.run(reference_server.call_tool('proharness_fetch', {'refs': refs, 'max_tokens': 512}))
+    raw = asyncio.run(reference_server.call_tool('hg_fetch', {'refs': refs, 'max_tokens': 512}))
     assert not raw.is_error
     text = next(c.text for c in raw.content if c.type == 'text')
     result = json.loads(text)

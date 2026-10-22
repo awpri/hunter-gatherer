@@ -3,7 +3,7 @@
 :root[data-motion] * {scroll-behavior:auto !important}
 :root[data-motion] :is(.record-row,.group-item,.view-title h1,.library-content,
   .inspector,.modal,.notice,.board-tools,.visual-picker,.command-palette,
-  .command-palette-backdrop,.proharness-mark,.row-activity,.loading-orbit span,
+  .command-palette-backdrop,.hunter-gatherer-mark,.row-activity,.loading-orbit span,
   .loading-record span,.activity-status.is-active .activity-dot,.brand-mark.agent-active) {
   animation:none !important;
 }

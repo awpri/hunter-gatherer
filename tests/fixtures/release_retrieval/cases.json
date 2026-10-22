@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "notice": "All organizations, people and events are invented. These cases were written before measuring either retrieval mode. This is a small author-created diagnostic set, not a representative or externally held-out benchmark.",
+  "documents": [
+    {
+      "id": "maple-benefits",
+      "path": "maple-benefits.txt",
+      "title": "Maple staff handbook",
+      "text": "Maple staff handbook\n\nStaff receive twenty-four days of vacation each calendar year. Unused vacation may be carried forward for up to three months. The payroll team processes expense reimbursements on the last business day of each month. Requests for new equipment go to the facilities desk."
+    },
+    {
+      "id": "bracken-policy",
+      "path": "bracken-policy.txt",
+      "title": "Bracken device policy",
+      "text": "Bracken device policy\n\nThe Bracken office provides shared laptops for visiting staff. Employees must not copy customer records onto personal USB drives. Encrypted company-issued drives are permitted after approval from the data steward. The reception desk holds the equipment checkout log."
+    },
+    {
+      "id": "sable-study",
+      "path": "sable-study.txt",
+      "title": "Sable packing study",
+      "text": "Sable packing study\n\nThe Sable team aimed to reduce damaged parcels by fifteen percent. The trial used redesigned inserts in forty packages. Damage rates were not measured, so the trial does not establish any reduction in breakage. Staff reported that the inserts were easier to assemble."
+    },
+    {
+      "id": "cedar-v1",
+      "path": "cedar-hours.txt",
+      "title": "Cedar reading room hours",
+      "text": "Cedar reading room hours\n\nNotice issued 2031-02-01. The reading room opens at 09:00 on Saturdays. Saturday access requires a library card. The book-return slot remains open after closing. Staff collect items from the return slot at the beginning of each shift."
+    },
+    {
+      "id": "cedar-v2",
+      "path": "cedar-hours.txt",
+      "title": "Cedar reading room hours",
+      "text": "Cedar reading room hours\n\nNotice issued 2031-03-01; replaces the February notice. The reading room opens at 11:00 on Saturdays. Saturday access no longer requires a library card. The book-return slot remains open after closing. Staff collect items from the return slot at the beginning of each shift."
+    },
+    {
+      "id": "kestrel-delivery",
+      "path": "kestrel-delivery.txt",
+      "title": "Kestrel dispatch note",
+      "text": "Kestrel dispatch note\n\nKestrel consignments travel by rail to the inland depot. Allow six working days for arrival after dispatch. Customers receive a tracking number when the wagon leaves the terminal. Weekend storage is included in the handling fee. Collect empty crates from the rear entrance."
+    },
+    {
+      "id": "juniper-forecast",
+      "path": "juniper-forecast.txt",
+      "title": "Juniper power contract",
+      "text": "Juniper power contract\n\nJuniper is negotiating the next annual electricity agreement. The renewal price has not been quoted. The current agreement ends on 30 September. Meter inspections occur in the first week of each month. Procurement will circulate the supplier proposal when it arrives."
+    },
+    {
+      "id": "oriel-approval",
+      "path": "oriel-approval.txt",
+      "title": "Oriel purchase review",
+      "text": "Oriel purchase review\n\nThe proposed Oriel scanner would replace two older machines. The committee has not approved the purchase. A decision is postponed until the accessibility assessment is complete. Finance has reserved a provisional budget; that reservation is not authorization to order equipment."
+    },
+    {
+      "id": "morrow-rota",
+      "path": "morrow-rota.txt",
+      "title": "Morrow duty roster",
+      "text": "Morrow duty roster\n\nInez Solano is responsible for locking the workshop each evening. Tariq Moss checks the inventory on Mondays. The fire panel is inspected by an external contractor every quarter. Notify the shift coordinator when swapping duties so that the roster can be updated."
+    },
+    {
+      "id": "willow-route",
+      "path": "willow-route.txt",
+      "title": "Willow visitor route",
+      "text": "Willow visitor route\n\nThe Willow gallery's east entrance is closed for repairs. Step-free access is available through the courtyard entrance. Follow the blue signs from the tram stop to reach the courtyard. Group bookings are checked at the information desk before the tour begins."
+    }
+  ],
+  "cases": [
+    {"id": "literal-vacation", "category": "literal", "question": "How many days of vacation do Maple staff receive each year?", "expected_document": "maple-benefits", "expected_sentence": "Staff receive twenty-four days of vacation each calendar year."},
+    {"id": "paraphrase-leave", "category": "paraphrase", "question": "What is the annual paid time off allowance at Maple?", "expected_document": "maple-benefits", "expected_sentence": "Staff receive twenty-four days of vacation each calendar year."},
+    {"id": "negated-permission", "category": "negation", "question": "Can Bracken employees put customer records on their own USB drives?", "expected_document": "bracken-policy", "expected_sentence": "Employees must not copy customer records onto personal USB drives."},
+    {"id": "target-versus-outcome", "category": "qualification", "question": "Did Sable achieve a fifteen percent reduction in damaged parcels?", "expected_document": "sable-study", "expected_sentence": "Damage rates were not measured, so the trial does not establish any reduction in breakage.", "no_supported_fact": true},
+    {"id": "current-version", "category": "versions", "question": "What time does the Cedar reading room open on Saturdays now?", "expected_document": "cedar-v2", "expected_sentence": "The reading room opens at 11:00 on Saturdays."},
+    {"id": "historical-version", "category": "versions", "question": "What were the Cedar reading room Saturday opening hours in the February notice?", "expected_document": "cedar-v1", "expected_sentence": "The reading room opens at 09:00 on Saturdays."},
+    {"id": "delivery-paraphrase", "category": "paraphrase", "question": "How long does Kestrel shipping take?", "expected_document": "kestrel-delivery", "expected_sentence": "Allow six working days for arrival after dispatch."},
+    {"id": "explicit-missing-price", "category": "missing", "question": "What will Juniper pay for electricity under its renewed agreement?", "expected_document": "juniper-forecast", "expected_sentence": "The renewal price has not been quoted.", "no_supported_fact": true},
+    {"id": "false-presupposition", "category": "negation", "question": "Why did the committee approve the Oriel scanner purchase?", "expected_document": "oriel-approval", "expected_sentence": "The committee has not approved the purchase.", "no_supported_fact": true},
+    {"id": "responsibility-paraphrase", "category": "paraphrase", "question": "Who closes up at Morrow after work?", "expected_document": "morrow-rota", "expected_sentence": "Inez Solano is responsible for locking the workshop each evening."},
+    {"id": "access-paraphrase", "category": "paraphrase", "question": "How can a wheelchair user get into the Willow gallery?", "expected_document": "willow-route", "expected_sentence": "Step-free access is available through the courtyard entrance."},
+    {"id": "absent-fact", "category": "missing", "question": "What is the official registration number of the Morrow organization?", "expected_document": null, "expected_sentence": null, "no_supported_fact": true}
+  ]
+}

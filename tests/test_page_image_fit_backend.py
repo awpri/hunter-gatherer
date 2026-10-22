@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from test_document_page_image import ingest, png_bytes
 
-backend = importlib.import_module('proharness.memory.document_page_image')
+backend = importlib.import_module('hunter_gatherer.memory.document_page_image')
 
 
 def fitted_result():

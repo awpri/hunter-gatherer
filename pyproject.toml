@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "proharness"
-version = "0.1.0"
+name = "hunter-gatherer"
+version = "0.1.0a1"
 description = "hunter/gatherer: a local evidence library with quote-first search and a compact MCP interface."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -79,13 +79,12 @@ Repository = "https://github.com/awpri/hunter-gatherer"
 Issues = "https://github.com/awpri/hunter-gatherer/issues"
 
 [project.scripts]
-hunt = "proharness.cli:main"
-proharness = "proharness.cli:main"
-proharness-mcp = "proharness.mcp.server:main"
-proharness-ui = "proharness.server.desktop:main"
+hunt = "hunter_gatherer.cli:main"
+hunt-mcp = "hunter_gatherer.mcp.server:main"
+hunt-ui = "hunter_gatherer.server.desktop:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["proharness"]
+packages = ["hunter_gatherer"]
 
 [tool.ruff]
 line-length = 100

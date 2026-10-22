@@ -1,7 +1,7 @@
-// Typed fetch wrapper for the ProHarness REST API.
+// Typed fetch wrapper for the hunter/gatherer REST API.
 // Token is read from localStorage (set on first load via ?token=...).
 
-const TOKEN_KEY = "proharness_token";
+const TOKEN_KEY = "hg_token";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

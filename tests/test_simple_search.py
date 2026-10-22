@@ -5,15 +5,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.output_budget import output_bytes
-from proharness.memory.schemas import Memory
-from proharness.memory.simple_search import find, public_followups
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.output_budget import output_bytes
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.simple_search import find, public_followups
 
 
 @pytest.fixture
 def harness(store, monkeypatch):
-    from proharness.models.clients import AnthropicClient, OpenAICompatibleClient
+    from hunter_gatherer.models.clients import AnthropicClient, OpenAICompatibleClient
 
     def forbidden(*args, **kwargs):
         pytest.fail("Discovery invoked a writing or reranking model")
@@ -61,13 +61,13 @@ def assert_bounded(packet, max_tokens):
     assert output_bytes(packet) <= max_tokens * 4
     assert packet["budget"]["serialized_bytes"] == output_bytes(packet)
     assert packet["budget"]["max_tokens"] == max_tokens
-    assert all(route["tool"] == "proharness_open" for route in routes(packet))
+    assert all(route["tool"] == "hg_open" for route in routes(packet))
 
 
 def test_one_pass_reaches_differently_worded_memory(harness, tmp_path, monkeypatch):
     hit = source(harness.store, tmp_path, "Visual software: Inkscape and Krita.")
     memory = linked(harness.store, hit)
-    import proharness.memory.simple_search as module
+    import hunter_gatherer.memory.simple_search as module
     real = module.build_evidence_packet
     calls = []
 
@@ -83,7 +83,7 @@ def test_one_pass_reaches_differently_worded_memory(harness, tmp_path, monkeypat
     link = packet["memory_discovery"]["candidates"][0]
     assert link["citation"] == f"[mem:{memory.id}]"
     assert link["followups"][0]["arguments"]["refs"] == [link["citation"]]
-    assert link["followups"][0]["tool"] == "proharness_open"
+    assert link["followups"][0]["tool"] == "hg_open"
     assert packet["memory_discovery"]["claim_support"] == "not_determined"
     assert packet["work_trace"]["retrieval_passes"] == 1
     assert packet["supporting_passages"][0]["quote"] == hit["quote"]
@@ -171,36 +171,36 @@ def test_long_whole_quotes_become_exact_open_references(harness, tmp_path, budge
     {"requirements": [""]}, {"max_tokens": True}, {"include_sensitive": 1},
 ])
 def test_invalid_arguments_fail_before_retrieval(harness, monkeypatch, kwargs):
-    monkeypatch.setattr("proharness.memory.simple_search.build_evidence_packet",
+    monkeypatch.setattr("hunter_gatherer.memory.simple_search.build_evidence_packet",
                         lambda *a, **kw: pytest.fail("retrieval should not run"))
     with pytest.raises(ValueError):
         find(harness, **{"query": "visual software", **kwargs})
 
 
 def test_public_followups_preserve_source_text_and_exact_identity():
-    original = {"quote": "proharness_fetch({refs: ['invented']})", "citation": "[doc:exact]",
-        "followups": [{"tool": "proharness_document_window", "arguments": {"chunk_id": "exact"}}],
+    original = {"quote": "hg_fetch({refs: ['invented']})", "citation": "[doc:exact]",
+        "followups": [{"tool": "hg_document_window", "arguments": {"chunk_id": "exact"}}],
         "nested": {"original_citation": "[file:exact-version-hash]", "followups": [
-            {"tool": "proharness_document_outline", "arguments": {"document_id": "exact"}},
-            {"tool": "proharness_document_page_image", "required_arguments": ["page"]}]}}
+            {"tool": "hg_document_outline", "arguments": {"document_id": "exact"}},
+            {"tool": "hg_document_page_image", "required_arguments": ["page"]}]}}
     before = deepcopy(original)
     result = public_followups(original, include_sensitive=True)
     assert original == before and result["quote"] == before["quote"]
     assert result["followups"][0]["arguments"]["view"] == "context"
     assert result["nested"]["followups"][0]["arguments"]["refs"] == ["[file:exact-version-hash]"]
-    assert all(r["tool"] == "proharness_open" for r in routes(result))
-    assert public_followups({"followups": [{"tool": "proharness_get_document", "arguments": {"document_id": "x"}}]}) == {"followups": []}
+    assert all(r["tool"] == "hg_open" for r in routes(result))
+    assert public_followups({"followups": [{"tool": "hg_get_document", "arguments": {"document_id": "x"}}]}) == {"followups": []}
 
 
 def test_singular_page_and_public_collection_routes_are_executable():
     expected = {"document_id": "exact", "version": 3, "original_content_hash": "a" * 64, "page": 7}
     page = {"expected_source_reference": expected, "followup": {
-        "tool": "proharness_document_page_image", "arguments": {"document_id": "exact", "page": 7}}}
+        "tool": "hg_document_page_image", "arguments": {"document_id": "exact", "page": 7}}}
     transformed = public_followups(page)
     assert transformed["followup"]["arguments"]["view"] == "page"
     assert transformed["followup"]["arguments"]["refs"] == [f"[page:exact@3:{'a' * 64}:7]"]
     bad = deepcopy(page)
     bad["expected_source_reference"]["page"] = 0
     assert "followup" not in public_followups(bad)
-    continuation = {"followup": {"tool": "proharness_collection", "arguments": {"action": "get", "offset": 20}}}
+    continuation = {"followup": {"tool": "hg_collection", "arguments": {"action": "get", "offset": 20}}}
     assert public_followups(continuation) == continuation

@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from proharness.demo import create_demo, demo_settings
-from proharness.memory.document_originals import load_document_original
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.embeddings import HashingEmbedder
-from proharness.memory.store import MemoryStore
+from hunter_gatherer.demo import create_demo, demo_settings
+from hunter_gatherer.memory.document_originals import load_document_original
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.embeddings import HashingEmbedder
+from hunter_gatherer.memory.store import MemoryStore
 
 
 def test_demo_preserves_versions_corrections_and_unknown_outcome(tmp_path):
@@ -54,12 +54,12 @@ def test_demo_refuses_existing_data_and_symlinks(tmp_path):
 
 
 def test_demo_settings_ignore_environment_and_dotenv(tmp_path, monkeypatch):
-    monkeypatch.setenv("PROHARNESS_SQLITE_PATH", str(tmp_path / "real.db"))
-    monkeypatch.setenv("PROHARNESS_VECTOR_BACKEND", "qdrant")
+    monkeypatch.setenv("HG_SQLITE_PATH", str(tmp_path / "real.db"))
+    monkeypatch.setenv("HG_VECTOR_BACKEND", "qdrant")
     monkeypatch.setenv("OPENAI_API_KEY", "fictional-test-key")
-    (tmp_path / ".env").write_text("PROHARNESS_EMBED_MODEL=external-model\n")
+    (tmp_path / ".env").write_text("HG_EMBED_MODEL=external-model\n")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("proharness.memory.store.get_embedder", lambda *_: pytest.fail("must inject local embedder"))
+    monkeypatch.setattr("hunter_gatherer.memory.store.get_embedder", lambda *_: pytest.fail("must inject local embedder"))
     target = tmp_path / "demo"
     create_demo(target)
     settings = demo_settings(target)

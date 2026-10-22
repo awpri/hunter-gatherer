@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-import proharness.memory.document_navigation as navigation
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.output_budget import output_bytes
+import hunter_gatherer.memory.document_navigation as navigation
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.output_budget import output_bytes
 
 
 def _source(store, tmp_path, monkeypatch, *, title="Research plan", author="Ada Author"):
     monkeypatch.setattr(
-        "proharness.memory.documents._extract",
+        "hunter_gatherer.memory.documents._extract",
         lambda path: (
             [
                 {"page": i + 1, "section": f"Page {i + 1}", "text": f"Exact event 2006: {i} 雪\n"}

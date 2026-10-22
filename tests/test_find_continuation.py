@@ -3,11 +3,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from proharness.memory import find_cursor
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.output_budget import output_bytes
-from proharness.memory.schemas import Memory
-from proharness.memory.simple_search import find
+from hunter_gatherer.memory import find_cursor
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.output_budget import output_bytes
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.simple_search import find
 
 
 def harness(store):
@@ -102,7 +102,7 @@ def test_changes_stale_public_cursor(store, mutation):
 def test_requirement_continuation_even_when_base_offset_zero(store, monkeypatch):
     base = [store.add(Memory(text=f"Copper sensor fact {index}")) for index in range(7)]
     required = store.add(Memory(text="Zirconium alternative coating detail."))
-    import proharness.memory.simple_search as search
+    import hunter_gatherer.memory.simple_search as search
     project = search.bounded_evidence_packet
     first = [True]
     required_ref = f"[mem:{required.id}]"
@@ -135,7 +135,7 @@ def test_requirement_continuation_even_when_base_offset_zero(store, monkeypatch)
 
 
 def test_projection_deferred_requirement_extra_remains_reachable(store, monkeypatch):
-    import proharness.memory.simple_search as search
+    import hunter_gatherer.memory.simple_search as search
 
     for index in range(7):
         store.add(Memory(text=f"Copper sensor main fact {index}"))
@@ -175,7 +175,7 @@ def test_requirement_also_in_base_is_represented_once(store):
 
 
 def test_empty_base_oversized_requirement_reports_budget_and_recovers(store, monkeypatch):
-    import proharness.memory.simple_search as search
+    import hunter_gatherer.memory.simple_search as search
 
     required = store.add(Memory(text="Zirconium coating " + "technical detail " * 300))
     required_ref = f"[mem:{required.id}]"
@@ -202,7 +202,7 @@ def test_frozen_subject_fixture_reaches_all_seven_expected_sources(store, tmp_pa
     import json
     from pathlib import Path
 
-    from proharness.memory.simple_open import open_sources
+    from hunter_gatherer.memory.simple_open import open_sources
 
     fixture = json.loads((Path(__file__).parent / 'fixtures/find_subject_v1.json').read_text())
     question = next(q for q in fixture['questions'] if len(q['relevant_sources']) == 7)

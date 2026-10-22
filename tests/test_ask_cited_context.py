@@ -6,12 +6,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.library_collections import export_cited_context
-from proharness.memory.output_budget import output_bytes
-from proharness.memory.schemas import Memory
-from proharness.memory.simple_search import find
-from proharness.server.routers import library
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.library_collections import export_cited_context
+from hunter_gatherer.memory.output_budget import output_bytes
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.simple_search import find
+from hunter_gatherer.server.routers import library
 
 
 @pytest.fixture

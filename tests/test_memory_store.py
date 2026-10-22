@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 
-from proharness.memory.schemas import Memory
+from hunter_gatherer.memory.schemas import Memory
 
 
 def test_add_and_get(store):
@@ -69,17 +69,17 @@ def test_touch_bumps_access_count(store):
 def test_vector_search_returns_relevant(store):
     """With the hashing embedder, shared tokens boost cosine. So a query
     sharing tokens with a stored memory should rank it highly."""
-    store.add(Memory(text="proharness router design", type="semantic"))
+    store.add(Memory(text="hunter_gatherer router design", type="semantic"))
     store.add(Memory(text="banana bread recipe", type="semantic"))
-    hits = store.vector_search("proharness router", top_k=2)
+    hits = store.vector_search("hunter_gatherer router", top_k=2)
     assert len(hits) >= 1
-    assert hits[0].payload["preview"].startswith("proharness router")
+    assert hits[0].payload["preview"].startswith("hunter_gatherer router")
 
 
 def test_vector_search_filters_by_type(store):
-    store.add(Memory(text="proharness router", type="semantic"))
-    store.add(Memory(text="proharness router event", type="episodic"))
-    hits = store.vector_search("proharness router", top_k=5, filters={"type": "semantic"})
+    store.add(Memory(text="hunter_gatherer router", type="semantic"))
+    store.add(Memory(text="hunter_gatherer router event", type="episodic"))
+    hits = store.vector_search("hunter_gatherer router", top_k=5, filters={"type": "semantic"})
     assert all(h.payload["type"] == "semantic" for h in hits)
 
 

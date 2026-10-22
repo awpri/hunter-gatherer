@@ -11,12 +11,12 @@ from types import SimpleNamespace
 import pytest
 from rich.console import Console
 
-from proharness import cli
-from proharness.demo import create_demo, demo_settings
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.schemas import Memory
-from proharness.memory.store import MemoryStore
-from proharness.terminal import passage_excerpt, render_ask, render_open, safe_text
+from hunter_gatherer import cli
+from hunter_gatherer.demo import create_demo, demo_settings
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.store import MemoryStore
+from hunter_gatherer.terminal import passage_excerpt, render_ask, render_open, safe_text
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def test_demo_ask_json_is_exact_offline_and_ignores_user_config(library, monkeyp
     directory, manifest = library
     monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
     monkeypatch.setattr(socket.socket, "connect", lambda *a, **k: pytest.fail("outbound connection"))
-    monkeypatch.setattr("proharness.loop.AgentLoop", lambda *a, **k: pytest.fail("agent initialized"))
+    monkeypatch.setattr("hunter_gatherer.loop.AgentLoop", lambda *a, **k: pytest.fail("agent initialized"))
     assert ask(directory, "is the lantern pilot real or no", "--json") == 0
     output = capsys.readouterr()
     assert output.err == ""
@@ -84,12 +84,43 @@ def test_excerpt_is_contiguous_and_retains_negation_context():
     assert passage_excerpt(quote, "astronaut moonwalk").text == quote
 
 
+def test_excerpt_preserves_distant_qualification_without_bolding_a_target():
+    quote = ("Stonebridge battery trial\n\nThe Stonebridge goal was two hundred hours of battery life. "
+             "Three prototype units were assembled. Technicians checked the casing dimensions. "
+             "No endurance measurements were collected, so that goal remains untested.")
+    excerpt = passage_excerpt(quote, "Did Stonebridge reach two hundred hours of battery life?")
+    assert "No endurance measurements were collected" in excerpt.text
+    assert excerpt.focus_start == excerpt.focus_end
+    assert excerpt.text in quote
+
+
+def test_excerpt_avoids_title_emphasis_for_a_paraphrase_only_match():
+    quote = ("Marigold visitor instructions\n\nRiders may leave bicycles in the rear courtyard. "
+             "Bring a personal lock because the reception desk cannot lend one. "
+             "The front steps are reserved for pedestrians during opening hours.")
+    excerpt = passage_excerpt(quote, "Where is cycle parking at Marigold?")
+    assert "Riders may leave bicycles in the rear courtyard." in excerpt.text
+    assert excerpt.focus_start == excerpt.focus_end
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_excerpt_keeps_plain_title_out_of_an_unambiguous_body_match(newline):
+    quote = ("Fennel office contact sheet\n\nThe reception telephone number is 01400 123456. "
+             "The office has an entrance facing the square. Its address is printed on all appointment letters. "
+             "Deliveries should use the side door.")
+    quote = quote.replace("\n", newline)
+    excerpt = passage_excerpt(quote, "What is the Fennel reception telephone number?")
+    assert "contact sheet" not in excerpt.text
+    assert excerpt.text[excerpt.focus_start:excerpt.focus_end] == "The reception telephone number is 01400 123456."
+    assert "Deliveries should use the side door." in excerpt.text
+
+
 def test_open_across_invocations_is_exact_and_needs_no_embedding(library, monkeypatch, capsys):
     directory, _ = library
     assert ask(directory, "weekly review schedule", "--json") == 0
     passage = json.loads(capsys.readouterr().out)["pages"][0]["supporting_passages"][0]
-    monkeypatch.setattr("proharness.memory.store.MemoryStore", lambda *a, **k: pytest.fail("writable store initialized"))
-    monkeypatch.setattr("proharness.memory.embeddings.get_embedder", lambda *a: pytest.fail("embedder initialized"))
+    monkeypatch.setattr("hunter_gatherer.memory.store.MemoryStore", lambda *a, **k: pytest.fail("writable store initialized"))
+    monkeypatch.setattr("hunter_gatherer.memory.embeddings.get_embedder", lambda *a: pytest.fail("embedder initialized"))
     for view in ("text", "context", "outline"):
         assert cli.main(["open", passage["citation"], "--demo-library", str(directory), "--view", view, "--json"]) == 0
         response = json.loads(capsys.readouterr().out)
@@ -140,7 +171,7 @@ def test_json_escapes_controls_losslessly_and_human_output_is_literal(library, t
 
 
 def test_missing_and_unrelated_databases_fail_without_creating_or_migrating(tmp_path, monkeypatch, capsys):
-    from proharness.config import Settings
+    from hunter_gatherer.config import Settings
 
     missing = tmp_path / "absent" / "not-a-library.db"
     monkeypatch.setattr(cli, "get_settings", lambda: Settings.model_construct(sqlite_path=str(missing)))
@@ -173,7 +204,7 @@ def test_ask_rejects_mismatched_model_before_writable_store(library, monkeypatch
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE store_meta SET value='st:different-model' WHERE key='embedder_fingerprint'")
     before = database.read_bytes()
-    monkeypatch.setattr("proharness.memory.store.MemoryStore", lambda *a, **k: pytest.fail("writable store initialized"))
+    monkeypatch.setattr("hunter_gatherer.memory.store.MemoryStore", lambda *a, **k: pytest.fail("writable store initialized"))
     assert ask(directory, "question", "--json") == 1
     output = capsys.readouterr()
     assert output.out == "" and "does not match this library" in json.loads(output.err)["error"]["message"]
@@ -187,7 +218,7 @@ def test_ask_consumes_continuations_before_exit_and_reports_remaining(library, m
         calls.append(kwargs)
         return {"query": kwargs["query"], "supporting_passages": [], "relevant_memories": [],
                 "continuation": {"next_cursor": f"token-{len(calls)}", "scope": "test"}}
-    monkeypatch.setattr("proharness.memory.simple_search.find", bounded_page)
+    monkeypatch.setattr("hunter_gatherer.memory.simple_search.find", bounded_page)
     assert ask(directory, "question", "--pages", "2", "--json") == 0
     response = json.loads(capsys.readouterr().out)
     assert response["has_more"] is True and len(response["pages"]) == 2
@@ -243,9 +274,9 @@ def warm_library(library, monkeypatch):
     """Real MCP HTTP protocol and shared store, without opening a network socket."""
     import httpx2
 
-    from proharness.mcp.server import _http_options, build_server
-    from proharness.mcp.tools import Harness
-    from proharness.server.library_app import build_library_app
+    from hunter_gatherer.mcp.server import _http_options, build_server
+    from hunter_gatherer.mcp.tools import Harness
+    from hunter_gatherer.server.library_app import build_library_app
 
     directory, manifest = library
     with MemoryStore(demo_settings(directory)) as store:
@@ -274,8 +305,8 @@ def warm_library(library, monkeypatch):
 
         monkeypatch.setattr(httpx2, "AsyncClient", InProcessClient)
         monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
-        monkeypatch.setattr("proharness.memory.embeddings.get_embedder", lambda *a: pytest.fail("client loaded a model"))
-        monkeypatch.setattr("proharness.memory.store.MemoryStore", lambda *a, **k: pytest.fail("client opened a database"))
+        monkeypatch.setattr("hunter_gatherer.memory.embeddings.get_embedder", lambda *a: pytest.fail("client loaded a model"))
+        monkeypatch.setattr("hunter_gatherer.memory.store.MemoryStore", lambda *a, **k: pytest.fail("client opened a database"))
         yield store, manifest
 
 
@@ -326,7 +357,7 @@ def test_server_ask_consumes_real_cursors_without_query_replay(warm_library, cap
                                   "http://127.0.0.1:bad", "http://127.0.0.1:\n8767"])
 def test_server_rejects_nonlocal_or_ambiguous_destinations_before_connection(url, monkeypatch, capsys):
     monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
-    monkeypatch.setattr("proharness.terminal._server_http_client", lambda: pytest.fail("network connection attempted"))
+    monkeypatch.setattr("hunter_gatherer.terminal._server_http_client", lambda: pytest.fail("network connection attempted"))
     assert cli.main(["ask", "question", "--server", url, "--json"]) == 1
     output = capsys.readouterr()
     assert output.out == "" and "loopback HTTP(S) origin" in json.loads(output.err)["error"]["message"]
@@ -348,7 +379,7 @@ def test_server_failures_do_not_fall_back_or_follow_redirects(mode, monkeypatch,
     monkeypatch.setattr(httpx2, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx2.MockTransport(respond), **kwargs))
     monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
-    monkeypatch.setattr("proharness.terminal._existing_settings", lambda *a: pytest.fail("local fallback"))
+    monkeypatch.setattr("hunter_gatherer.terminal._existing_settings", lambda *a: pytest.fail("local fallback"))
     assert cli.main(["ask", "question", "--server", "http://127.0.0.1:8767", "--json"]) == 1
     output = capsys.readouterr()
     assert output.out == ""
@@ -364,7 +395,7 @@ def test_server_library_options_are_mutually_exclusive():
 
 
 def test_server_requires_structured_contract_and_reports_tool_errors():
-    from proharness.terminal import _server_endpoint, _server_payload
+    from hunter_gatherer.terminal import _server_endpoint, _server_payload
 
     assert _server_endpoint("http://[::1]:8767/") == "http://[::1]:8767/mcp/library"
     for body in (None, [], {"some_other_api": True}):

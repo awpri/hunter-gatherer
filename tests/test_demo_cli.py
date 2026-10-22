@@ -5,13 +5,13 @@ import socket
 
 import pytest
 
-from proharness import cli
-from proharness.config import Settings
-from proharness.memory.embeddings import HashingEmbedder, get_embedder
+from hunter_gatherer import cli
+from hunter_gatherer.config import Settings
+from hunter_gatherer.memory.embeddings import HashingEmbedder, get_embedder
 
 
 def test_explicit_hashing_never_probes_model_packages(monkeypatch):
-    monkeypatch.setattr('proharness.memory.embeddings._st_available', lambda: pytest.fail('model dependency probe'))
+    monkeypatch.setattr('hunter_gatherer.memory.embeddings._st_available', lambda: pytest.fail('model dependency probe'))
     embedder = get_embedder(Settings(_env_file=None, embed_model='hashing'))
     assert isinstance(embedder, HashingEmbedder) and embedder.fingerprint() == 'hashing:384'
     assert embedder.embed('Lantern review') == embedder.embed('Lantern review')
@@ -30,8 +30,8 @@ def test_cli_demo_create_and_serve_ignore_ambient_store_and_network(tmp_path, mo
     target = tmp_path / 'offline demo'
     real = tmp_path / 'real.db'
     real.write_bytes(b'untouched existing user data')
-    monkeypatch.setenv('PROHARNESS_SQLITE_PATH', str(real))
-    monkeypatch.setenv('PROHARNESS_EMBED_MODEL', 'not-a-model')
+    monkeypatch.setenv('HG_SQLITE_PATH', str(real))
+    monkeypatch.setenv('HG_EMBED_MODEL', 'not-a-model')
     monkeypatch.setattr(cli, 'get_settings', lambda: pytest.fail('ambient settings'))
     monkeypatch.setattr(socket.socket, 'connect', lambda *a, **k: pytest.fail('outbound network'))
     assert cli.main(['demo', 'create', str(target)]) == 0
@@ -44,11 +44,11 @@ def test_cli_demo_create_and_serve_ignore_ambient_store_and_network(tmp_path, mo
         assert owner.settings.local_only and owner.settings.embed_model == 'hashing'
         assert isinstance(owner.loop.embedder, HashingEmbedder)
         assert options == {'host': '127.0.0.1', 'port': 8767, 'proxy_headers': False}
-        from proharness.mcp.profiles import LIBRARY_TOOL_NAMES
-        from proharness.mcp.server import build_server
+        from hunter_gatherer.mcp.profiles import LIBRARY_TOOL_NAMES
+        from hunter_gatherer.mcp.server import build_server
         server = build_server(harness=owner, tool_profile='library')[0]
         assert {t.name for t in offline_loop.run(server.list_tools())} == set(LIBRARY_TOOL_NAMES)
-        response = offline_loop.run(server.call_tool('proharness_find', {'query': 'Lantern weekly review schedule'}))
+        response = offline_loop.run(server.call_tool('hg_find', {'query': 'Lantern weekly review schedule'}))
         assert not response.is_error
         assert 'Tuesday' in str(response.structured_content)
         running.append(owner)

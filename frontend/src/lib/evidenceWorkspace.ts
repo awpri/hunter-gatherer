@@ -118,7 +118,7 @@ function hasAuthenticityWording(text:string):boolean {
   || /\b(?:is|are|was|were)\s+(?:(?:not|entirely|all)\s+)*(?:real|genuine|authentic)\b/i.test(text);
 }
 
-/** A display window into the original text, not a summary or retrieval policy. */
+/** A conservative source window; matching words do not establish an answer. */
 export function passageExcerpt(quote:string,query:string):{text:string;leading:boolean;trailing:boolean;clipped:boolean;focusStart?:number;focusEnd?:number} {
  const full={text:quote,leading:false,trailing:false,clipped:false};
  if(quote.length<=140)return full;
@@ -126,10 +126,20 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
  const terms=new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(term=>!stop.has(term)));
  if(!terms.size)return full;
  const authenticity=asksAboutAuthenticity(query);
+ const paragraphs:{start:number;end:number}[]=[];
+ let paragraphStart=0;
+ for(const separator of quote.matchAll(/\r?\n[ \t]*(?:\r?\n)+/g)){
+  paragraphs.push({start:paragraphStart,end:separator.index!});
+  paragraphStart=separator.index!+separator[0].length;
+ }
+ paragraphs.push({start:paragraphStart,end:quote.length});
+ // Rank a short, unpunctuated initial title line as structure, not an answer.
+ const initial=quote.slice(0,paragraphs[0].end).trim();
+ const plainTitleEnd=paragraphs.length>1&&initial.length>0&&initial.length<=120&&!initial.includes('\n')&&!/[.!?;:]["”’')\]]*$/.test(initial)?paragraphs[0].end:0;
  const units:{start:number;end:number;score:number;matches:string[];structural:boolean;statusMatch:boolean}[]=[];
  // Keep complete sentences and paragraphs; soft line wraps must not split meaning.
  // Offsets always refer to the raw source, including its original whitespace.
- const boundaries=[...new Set([...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\n{2,}/gu),...quote.matchAll(/^#{1,6}[^\n]*(?:\n|$)/gm)].map(match=>match.index!+match[0].length))].sort((a,b)=>a-b);
+ const boundaries=[...new Set([...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\r?\n[ \t]*(?:\r?\n)+/gu),...quote.matchAll(/^#{1,6}[^\n]*(?:\n|$)/gm)].map(match=>match.index!+match[0].length))].sort((a,b)=>a-b);
  if(boundaries.at(-1)!==quote.length)boundaries.push(quote.length);
  let start=0;
  for(const end of boundaries){
@@ -137,7 +147,7 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
   if(text.trim()){
    const words=new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);
    const matches=[...terms].filter(term=>words.has(term));
-   const structural=/^\s*#{1,6}\s/.test(text)||/^\s*(?:date|author|title|version)\s*:[^\n]*\s*$/i.test(text);
+   const structural=!!(plainTitleEnd&&start<plainTitleEnd)||/^\s*#{1,6}\s/.test(text)||/^\s*(?:date|author|title|version)\s*:[^\n]*\s*$/i.test(text);
    units.push({start,end,score:0,matches,structural,statusMatch:authenticity&&hasAuthenticityWording(text)});
   }
   start=end;
@@ -145,29 +155,42 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
  // Repeated subject names identify the document; rarer question terms identify
  // the sentence to read. Heading matches alone must not displace source prose.
  const frequency=new Map([...terms].map(term=>[term,units.filter(unit=>unit.matches.includes(term)).length]));
- const bodyMatches=units.some(unit=>!unit.structural&&(unit.matches.length>0||unit.statusMatch));
+ const headingTerms=new Set(units.filter(unit=>unit.structural).flatMap(unit=>unit.matches));
+ const contentTerms=new Set([...terms].filter(term=>!headingTerms.has(term)));
  for(const unit of units){
   const overlap=unit.matches.reduce((score,term)=>score+1/(frequency.get(term)||1),0);
   // For explicit authenticity questions, source-status wording matters more
   // than repeated project names. This changes presentation only: it neither
   // verifies a claim nor filters sources, and negation remains in the sentence.
-  unit.score=unit.structural&&bodyMatches?0:overlap+(unit.statusMatch?terms.size+1:0);
+  unit.score=unit.structural?0:overlap+(unit.statusMatch?terms.size+1:0);
  }
  const best=units.reduce((selected,unit,index)=>unit.score>(units[selected]?.score||0)?index:selected,-1);
  if(best<0)return full;
- // Keep immediate context, including qualifications and negations, without padding
- // a short matching sentence with unrelated archive prose just to fill the card.
- let first=Math.max(0,best-1),last=Math.min(units.length-1,best+1);
- // Trim only structural edges. Do not jump over an interior heading to join
- // separate spans, or discard neighboring prose that qualifies the focus.
- while(first<best&&units[first].structural)first++;
- while(last>best&&units[last].structural)last--;
- let from=units[first].start,to=units[last].end;
- while(from<to&&/\s/.test(quote[from]))from++;
- while(to>from&&/\s/.test(quote[to-1]))to--;
  let focusFrom=units[best].start,focusTo=units[best].end;
  while(focusFrom<focusTo&&/\s/.test(quote[focusFrom]))focusFrom++;
  while(focusTo>focusFrom&&/\s/.test(quote[focusTo-1]))focusTo--;
+ const paragraph=paragraphs.find(item=>item.start<=focusFrom&&focusFrom<item.end)!;
+ let first=best,last=best;
+ while(first>0&&units[first-1].end>paragraph.start&&!units[first-1].structural)first--;
+ while(last+1<units.length&&units[last+1].start<paragraph.end&&!units[last+1].structural)last++;
+ // Preserve all qualifications in ordinary paragraphs. Longer paragraphs use
+ // a neighboring-sentence preview with no selective emphasis; full text remains
+ // available through Read in context. This is a soft, whole-sentence bound.
+ const longParagraph=units[last].end-units[first].start>800;
+ if(longParagraph){
+  first=Math.max(0,best-1);last=Math.min(units.length-1,best+1);
+  while(first<best&&units[first].structural)first++;
+  while(last>best&&units[last].structural)last--;
+ }
+ let from=units[first].start,to=units[last].end;
+ while(from<to&&/\s/.test(quote[from]))from++;
+ while(to>from&&/\s/.test(quote[to-1]))to--;
  const leading=!!quote.slice(0,from).trim(),trailing=!!quote.slice(to).trim();
- return {text:quote.slice(from,to),leading,trailing,clipped:leading||trailing,focusStart:focusFrom-from,focusEnd:focusTo-from};
+ const result={text:quote.slice(from,to),leading,trailing,clipped:leading||trailing};
+ const strongMatch=units[best].statusMatch||(contentTerms.size>0&&units[best].matches.filter(term=>contentTerms.has(term)).length>=Math.min(2,contentTerms.size));
+ // Conservatively remove emphasis; do not claim to resolve contradictions.
+ const qualification=/\b(?:no|not|never|without|only|however|although|unless|except|unverified|unconfirmed|unknown|untested|pending)\b|n['’]t\b/i;
+ const surroundingQualification=units.some((unit,index)=>index>=first&&index<=last&&index!==best&&qualification.test(quote.slice(unit.start,unit.end)));
+ if(longParagraph||!strongMatch||surroundingQualification)return result;
+ return {...result,focusStart:focusFrom-from,focusEnd:focusTo-from};
 }

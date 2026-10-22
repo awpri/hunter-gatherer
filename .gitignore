@@ -43,7 +43,7 @@ htmlcov/
 *~
 .DS_Store
 
-# ProHarness runtime artifacts
+# hunter/gatherer runtime artifacts
 .env
 *.db
 *.db-journal

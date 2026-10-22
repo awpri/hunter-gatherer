@@ -1,9 +1,9 @@
 """The internal recall tool follows the same explicit privacy boundary."""
 import json
 
-from proharness.memory.schemas import Memory
-from proharness.tools.base import ToolContext
-from proharness.tools.builtin import MemoryRecallTool
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.tools.base import ToolContext
+from hunter_gatherer.tools.builtin import MemoryRecallTool
 
 
 def test_internal_recall_sensitive_opt_in_is_explicit_boolean(store):
@@ -20,13 +20,13 @@ def test_internal_recall_sensitive_opt_in_is_explicit_boolean(store):
 
 
 def test_internal_recall_rechecks_privacy_after_retrieval(store, monkeypatch):
-    from proharness.memory.recall import recall
+    from hunter_gatherer.memory.recall import recall
 
     memory = store.add(Memory(text="Zephyr material budget."))
     old_hits = recall(store, "Zephyr", touch=False)
     current = store.get(memory.id)
     current.metadata["sensitive"] = True
     store.update(current)
-    monkeypatch.setattr("proharness.memory.recall.recall", lambda *a, **k: old_hits)
+    monkeypatch.setattr("hunter_gatherer.memory.recall.recall", lambda *a, **k: old_hits)
     result = MemoryRecallTool().run({"query": "Zephyr"}, ToolContext(store=store, settings=store.settings))
     assert memory.text not in result.content

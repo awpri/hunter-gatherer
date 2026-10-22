@@ -1,9 +1,9 @@
 """Derived preparation is bounded, durable and separate from source success."""
 import sqlite3
 
-from proharness.memory.bounded_retrieval import index_readiness, prepare_index_batch
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.import_jobs import ImportJobs
+from hunter_gatherer.memory.bounded_retrieval import index_readiness, prepare_index_batch
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.import_jobs import ImportJobs
 
 
 def archive(store, tmp_path):
@@ -60,7 +60,7 @@ def test_import_source_success_separate_from_preparation_failure(store, tmp_path
     job = jobs.create([path])
     def fail(*args, **kwargs):
         raise RuntimeError("private path and title")
-    monkeypatch.setattr("proharness.memory.bounded_retrieval.prepare_index_batch", fail)
+    monkeypatch.setattr("hunter_gatherer.memory.bounded_retrieval.prepare_index_batch", fail)
     result = jobs.run(job["job_id"])
     assert result["counts"]["succeeded"] == 1
     assert result["search_index"]["status"] == "failed"
@@ -113,7 +113,7 @@ def test_search_pending_preparation_keeps_complete_results(store, tmp_path):
 
 
 def test_unavailable_native_acceleration_retains_queue_without_actionable_pending(store, tmp_path, monkeypatch):
-    from proharness.memory.document_search import ensure_vectors
+    from hunter_gatherer.memory.document_search import ensure_vectors
     store.settings.archive_search_policy = "bounded"
     owner = DocumentArchive(store, initialize_search=False)
     path = tmp_path / "source.txt"
@@ -121,7 +121,7 @@ def test_unavailable_native_acceleration_retains_queue_without_actionable_pendin
     owner.ingest(path)
     # Simulate a database whose vector queue was created on another host.
     ensure_vectors(store._sqlite)
-    monkeypatch.setattr("proharness.memory.document_search.load_vec", lambda db: False)
+    monkeypatch.setattr("hunter_gatherer.memory.document_search.load_vec", lambda db: False)
     queued = store._sqlite.execute("SELECT count(*) FROM archive_vector_dirty").fetchone()[0]
     assert queued == 1
     result = prepare_index_batch(store)
@@ -149,7 +149,7 @@ def test_polling_and_recreated_manager_keep_failure_separate_from_live_readiness
     def fail(*args, **kwargs):
         raise RuntimeError("private source path")
     with monkeypatch.context() as patch:
-        patch.setattr("proharness.memory.bounded_retrieval.prepare_index_batch", fail)
+        patch.setattr("hunter_gatherer.memory.bounded_retrieval.prepare_index_batch", fail)
         jobs.run(job_id)
     with sqlite3.connect(store.settings.sqlite_path) as reopened:
         import json
@@ -175,8 +175,8 @@ def test_ready_first_query_has_zero_bulk_preparation(store, tmp_path, monkeypatc
     """
     import time
 
-    import proharness.memory.bounded_retrieval as bounded
-    import proharness.memory.document_search as native
+    import hunter_gatherer.memory.bounded_retrieval as bounded
+    import hunter_gatherer.memory.document_search as native
     store.settings.archive_search_policy = "bounded"
     path = tmp_path / "source.txt"
     path.write_text("Roman imperial history and public affairs. " * 300)
@@ -231,7 +231,7 @@ def test_missing_native_index_cannot_report_ready_before_initial_conversion(stor
 def test_exhaustive_native_preparation_is_bounded_and_ready_first_semantic_query_is_warm(store, tmp_path, monkeypatch):
     import pytest
 
-    import proharness.memory.document_search as native
+    import hunter_gatherer.memory.document_search as native
     class Semantic:
         def fingerprint(self):
             return "readiness-synthetic-v1"
@@ -277,10 +277,10 @@ def test_exhaustive_unavailable_native_queue_does_not_spin(store, tmp_path, monk
     path = tmp_path / "source.txt"
     path.write_text("Roman public history source.")
     owner.ingest(path)
-    from proharness.memory.document_search import ensure_vectors
+    from hunter_gatherer.memory.document_search import ensure_vectors
     ensure_vectors(store._sqlite)
-    monkeypatch.setattr("proharness.memory.document_search.load_vec", lambda db: False)
-    monkeypatch.setattr("proharness.memory.bounded_retrieval._native_vector_available", lambda db: False)
+    monkeypatch.setattr("hunter_gatherer.memory.document_search.load_vec", lambda db: False)
+    monkeypatch.setattr("hunter_gatherer.memory.bounded_retrieval._native_vector_available", lambda db: False)
     result = prepare_index_batch(store, 1)
     assert result["status"] == "ready" and not result["pending"]
     assert result["vector_pending"] and result["vector_processed"] == 0

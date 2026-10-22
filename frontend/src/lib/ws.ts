@@ -15,7 +15,7 @@ export class StreamClient {
     // Construct the WS URL from the current location + token.
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const params = new URLSearchParams();
-    const token = localStorage.getItem("proharness_token");
+    const token = localStorage.getItem("hg_token");
     if (token) params.set("token", token);
     this.url = `${proto}//${window.location.host}/ws/stream${params.toString() ? `?${params}` : ""}`;
   }

@@ -4,8 +4,8 @@ import json
 import socket
 import sys
 
-from proharness import cli
-from proharness.setup import setup_report
+from hunter_gatherer import cli
+from hunter_gatherer.setup import setup_report
 
 
 def test_setup_json_does_not_load_configuration_or_connect(monkeypatch, capsys):

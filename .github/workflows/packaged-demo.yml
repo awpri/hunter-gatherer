@@ -1,9 +1,31 @@
-name: Packaged fictional demo
+name: Release checks
 on:
   push:
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Check and rebuild the packaged interface
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Verify packaged assets match source
+        run: git diff --exit-code -- hunter_gatherer/server/library_static
   packaged-demo:
     timeout-minutes: 25
     strategy:
@@ -14,6 +36,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -25,19 +49,22 @@ jobs:
       - name: Install wheel into fresh environment and exercise outside checkout
         shell: bash
         run: |
-          python -m venv "$RUNNER_TEMP/proharness-install"
+          python -m venv "$RUNNER_TEMP/hunter_gatherer-install"
           if [ "$RUNNER_OS" = "Windows" ]; then
-            smoke_python="$RUNNER_TEMP/proharness-install/Scripts/python.exe"
+            smoke_python="$RUNNER_TEMP/hunter_gatherer-install/Scripts/python.exe"
           else
-            smoke_python="$RUNNER_TEMP/proharness-install/bin/python"
+            smoke_python="$RUNNER_TEMP/hunter_gatherer-install/bin/python"
           fi
           wheels=(dist/*.whl)
           "$smoke_python" -m pip install "${wheels[0]}[dev,document-view]"
           cp scripts/smoke_packaged_demo.py "$RUNNER_TEMP/smoke_packaged_demo.py"
+          cp scripts/smoke_personal_library.py "$RUNNER_TEMP/smoke_personal_library.py"
           cd "$RUNNER_TEMP"
           export PAGE_IMAGE_TEST_PYTHON="$smoke_python"
           "$smoke_python" -m pytest -q --tb=short -p no:cacheprovider --junitxml="$RUNNER_TEMP/packaged-tests.xml" "$RUNNER_TEMP/public-candidate/tests"
           "$smoke_python" -I -B smoke_packaged_demo.py --require-lean --output packaged-demo.json
+          "$smoke_python" -I -B smoke_personal_library.py --output personal-library.json
+          "$smoke_python" -m pip freeze > resolved-dependencies.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -45,4 +72,6 @@ jobs:
           path: |
             ${{ runner.temp }}/packaged-demo.json
             ${{ runner.temp }}/packaged-tests.xml
+            ${{ runner.temp }}/personal-library.json
+            ${{ runner.temp }}/resolved-dependencies.txt
           if-no-files-found: ignore

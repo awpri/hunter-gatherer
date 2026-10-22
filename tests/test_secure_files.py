@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from proharness.memory import secure_files
-from proharness.memory.secure_files import lock_exclusive, open_regular
+from hunter_gatherer.memory import secure_files
+from hunter_gatherer.memory.secure_files import lock_exclusive, open_regular
 
 
 def test_binary_read_and_descriptor_ownership(tmp_path):

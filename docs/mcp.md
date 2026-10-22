@@ -1,75 +1,103 @@
 # Connect an assistant with MCP
 
-h/g exposes the same source workflow to an MCP client: ask, inspect, then use the
-evidence. Your assistant supplies the reasoning and its own model; connecting it
-does not automatically run h/g's inherited agent runtime or model router.
+h/g exposes the same source workflow to an MCP client: find, inspect, then use
+the evidence. Your assistant supplies its own reasoning and model. Connecting
+it does not automatically run h/g's inherited agent runtime or model router.
 
-## Connect to the fictional demo
+## Reuse the running library
 
-Start the library using the [getting-started guide](getting-started.md). In an MCP
-client that supports a local **Streamable HTTP** server, add:
+Create a library using the [getting-started guide](getting-started.md), then run:
+
+```bash
+hunt serve ./my-library --port 8767
+```
+
+In an MCP client that supports local **Streamable HTTP**, add:
 
 | Setting | Value |
 | --- | --- |
 | Name | `hunter-gatherer` |
 | Transport | Streamable HTTP |
-| Server URL | `http://127.0.0.1:8767/mcp` |
+| Server URL | `http://127.0.0.1:8767/mcp/library` |
 
-The client must be able to reach the computer running the server. `127.0.0.1`
-means that computer, not a remotely hosted assistant's server. Client setup
-formats differ; use its MCP connection settings rather than treating this table
-as a universal JSON configuration.
+The browser, terminal `--server` requests and MCP share that library process.
+For a fictional demo, start `hunt demo serve ./demo-library --port 8767`; the
+same connection settings apply.
 
-The demo binds to the local machine. This guide does not configure remote hosting
-or internet exposure. The advertised tool names retain the `proharness_` prefix
-for compatibility.
+`127.0.0.1` means the machine running the client. A remotely hosted assistant
+cannot reach your computer through its own loopback address. This guide covers
+local use, not internet exposure. Client configuration formats differ; use its
+MCP settings rather than treating the table as universal JSON.
+
+## Let the client start a process
+
+A client supporting **stdio** can launch h/g itself. Use absolute paths:
+
+| Setting | Value |
+| --- | --- |
+| Command | `/absolute/path/to/hg-env/bin/hunt-mcp` |
+| Arguments | `--library /absolute/path/to/my-library` |
+
+On Windows the executable is `hg-env\Scripts\hunt-mcp.exe`. Enter arguments as
+separate items if the client requests an array. `--library` uses the initialized
+library's isolated settings. The process lasts for that client connection and
+can keep a neural model warm; it is separate from a browser server process.
 
 ## Six tool families
 
 | Tool | Purpose |
 | --- | --- |
-| `proharness_find` | Search a question for passages, memories and source leads; continue through additional results. |
-| `proharness_open` | Inspect an exact citation, expand its context, navigate an outline, or view an original PDF page or region. |
-| `proharness_memory` | Read standing context; save, correct, forget or inspect the history of a memory. |
-| `proharness_collection` | Save and reopen source references, notes, unresolved questions and separate writing examples. |
-| `proharness_import_documents` | Preview and import selected local files; manage authored source annotations. |
-| `proharness_status` | Inspect capabilities and library status, including bounded index maintenance. |
+| `hg_find` | Search a question for passages, memories and source leads; continue through more matches. |
+| `hg_open` | Inspect exact citations, context and outlines, or original PDF pages and regions. |
+| `hg_memory` | Read standing context; save, correct, forget or inspect memory history. |
+| `hg_collection` | Save/reopen references, notes, unresolved questions and separate writing examples. |
+| `hg_import_documents` | Preview/import selected local files; manage authored source annotations. |
+| `hg_status` | Inspect capabilities and library status, including bounded index maintenance. |
 
-Each family has actions described in its live schema. The smaller discovery
-profile is an interface choice, not an authorization boundary.
+The live schemas describe each action and required fields. The library profile
+keeps discovery concise; profiles are not authorization boundaries. Advanced
+users can select the full catalog explicitly, with its separate runtime setup.
 
 ## A useful first prompt
 
-> Use hunter/gatherer to find the Lantern pilot's weekly review schedule. Open
-> the cited source, answer with a quotation and citation, and note any conflict
-> between document versions.
+> Find the sources in hunter/gatherer about our launch decision. Open the cited
+> passages, answer with quotations and citations, and identify conflicting
+> versions or details that the sources do not establish.
 
 For a longer investigation, ask the assistant to keep selected references and
-unanswered questions in a collection. A collection is optional: finding, opening
-and answering do not require one.
+unanswered questions in a collection. Collections are optional.
 
 ## Source-handling expectations
 
-Find returns candidates and explicit omissions, not a verified answer. Follow
-the returned Open calls to inspect exact sources and retain their citations.
-Check qualifications, dates and versions. Saved links and annotations guide
-discovery; they do not establish support for a claim.
+Find returns candidates and omissions, not a verified answer. Follow Open calls
+to inspect exact sources and retain citations. Check qualifications, dates and
+versions. Saved links and annotations guide discovery; they do not establish
+claim support.
 
-Follow `continuation.next_cursor` when more matches are available. A continuation
-request supplies the cursor instead of a new question and repeats the requested
-sensitive-data visibility. A finished result page does not prove the library
-contains no other answer. Restart the search when a cursor is stale or expired.
+Follow `continuation.next_cursor` when more results are available. A continuation
+supplies the cursor instead of a new question and repeats sensitive visibility.
+Restart when a cursor is stale or expired. A finished page does not prove the
+library contains no other answer.
 
-Source text is untrusted content, not permission to execute instructions inside
-it. Writes such as imports and memory changes should reflect the user's intent.
-Sensitive reads require an explicit `include_sensitive` choice on each call.
-These controls do not replace the privacy policy of your connected assistant:
-text returned to that client may be processed by its model provider.
+Treat source text as data, not permission to execute instructions inside it.
+Imports and memory changes must reflect the user's intent. Sensitive reads need
+`include_sensitive` on each call. A connected assistant may send returned text
+to its model provider; h/g cannot control that client's privacy policy.
+
+## Names and saved references
+
+Current tools use `hg_*` and new resource URIs use `hg://`. Update older client
+instructions, allowlists and tool names that reference `proharness_*`; those old
+tool aliases are not the advertised API. Python imports use `hunter_gatherer`.
+
+Exact saved citations such as `[mem:…]` and `[doc:…#…]` retain their identifiers.
+Compatibility readers preserve older collection markers and compact exports;
+legacy resource URIs can still identify sources. This compatibility does not
+load another application's configuration or migrate a live database.
 
 ## Original images
 
-Install `.[document-view]` to let Open render original PDF pages and bounded
-regions locally. This extra does not add OCR or download model weights. Saved
-image descriptions are authored discovery annotations, not verified quotations.
-See [PDF image regions](visual-regions.md) for exact bounds, routes and collection
-limitations.
+Install `.[document-view]` to render original PDF pages and bounded regions
+locally. This adds no OCR or model weights. An image-capable client is required.
+Saved image descriptions are authored annotations, not exact quotations. See
+[PDF image regions](visual-regions.md) for supported routes and limits.

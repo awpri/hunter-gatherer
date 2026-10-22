@@ -11,7 +11,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from proharness.memory import page_image_worker as worker
+from hunter_gatherer.memory import page_image_worker as worker
 
 
 @pytest.mark.parametrize("requested, expected", [

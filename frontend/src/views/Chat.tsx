@@ -117,7 +117,7 @@ export function ChatView({ onTurnComplete }: { onTurnComplete: () => void }) {
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.length === 0 && (
           <div className="text-zinc-600 text-sm text-center mt-20">
-            Ask ProHarness anything. Routed, memory-primed, tool-using.
+            Ask hunter/gatherer anything. Routed, memory-primed, tool-using.
           </div>
         )}
         {messages.map((m, i) => (

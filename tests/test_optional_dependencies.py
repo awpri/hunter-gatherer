@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from proharness.config import Settings
-from proharness.memory.embeddings import HashingEmbedder, SentenceTransformerEmbedder, get_embedder
-from proharness.memory.store import MemoryStore
-from proharness.optional_dependencies import OptionalDependencyError
+from hunter_gatherer.config import Settings
+from hunter_gatherer.memory.embeddings import HashingEmbedder, SentenceTransformerEmbedder, get_embedder
+from hunter_gatherer.memory.store import MemoryStore
+from hunter_gatherer.optional_dependencies import OptionalDependencyError
 
 
 def _block_import(monkeypatch, package):
@@ -41,7 +41,7 @@ def test_missing_semantic_dependency_never_creates_or_changes_library(tmp_path):
 
 
 def test_configured_semantic_adapter_remains_lazy(monkeypatch):
-    monkeypatch.setattr("proharness.memory.embeddings._st_available", lambda: True)
+    monkeypatch.setattr("hunter_gatherer.memory.embeddings._st_available", lambda: True)
     _block_import(monkeypatch, "sentence_transformers")
     embedder = get_embedder(Settings(embed_model="configured-model"))
     assert isinstance(embedder, SentenceTransformerEmbedder)
@@ -60,7 +60,7 @@ def test_missing_qdrant_dependency_never_selects_memory_backend(monkeypatch, tmp
 
 
 def test_openai_speech_explains_its_own_optional_extra(monkeypatch):
-    from proharness.voice.tts import OpenAITTS
+    from hunter_gatherer.voice.tts import OpenAITTS
 
     _block_import(monkeypatch, "openai")
     with pytest.raises(OptionalDependencyError, match=r"\[tts-openai\]"):
@@ -68,7 +68,7 @@ def test_openai_speech_explains_its_own_optional_extra(monkeypatch):
 
 
 def test_doctor_does_not_promise_a_fallback_for_missing_qdrant(monkeypatch, tmp_path, capsys):
-    from proharness import cli
+    from hunter_gatherer import cli
 
     _block_import(monkeypatch, "qdrant_client")
     monkeypatch.setattr(cli, "get_settings", lambda: Settings(sqlite_path=str(tmp_path / "doctor.db")))
@@ -102,9 +102,9 @@ def test_demo_and_library_start_without_heavy_dependencies(tmp_path):
             raise AssertionError('Offline base demo attempted a network connection')
         socket.socket.connect = no_network
 
-        from proharness import cli
-        from proharness.mcp.tools import call_tool
-        from proharness.models.clients import AnthropicClient, OpenAICompatibleClient
+        from hunter_gatherer import cli
+        from hunter_gatherer.mcp.tools import call_tool
+        from hunter_gatherer.models.clients import AnthropicClient, OpenAICompatibleClient
         import uvicorn
 
         # Chat provider adapters use the base HTTP client, not provider SDKs.
@@ -116,7 +116,7 @@ def test_demo_and_library_start_without_heavy_dependencies(tmp_path):
 
         def inspect_app(app, **options):
             owner = app.state.library_harness
-            result = call_tool(owner, 'proharness_find', {'query': 'Lantern weekly review schedule'})
+            result = call_tool(owner, 'hg_find', {'query': 'Lantern weekly review schedule'})
             assert 'Tuesday' in str(result), result
             assert owner.loop.embedder.fingerprint() == 'hashing:384'
             assert owner.settings.vector_backend == 'memory'
@@ -131,9 +131,9 @@ def test_demo_and_library_start_without_heavy_dependencies(tmp_path):
     env = dict(os.environ)
     # Use the imported package, whether pytest targets a checkout or an installed
     # candidate wheel; never accidentally fall back to another personal install.
-    import proharness
+    import hunter_gatherer
 
-    env["PYTHONPATH"] = str(Path(proharness.__file__).resolve().parent.parent)
+    env["PYTHONPATH"] = str(Path(hunter_gatherer.__file__).resolve().parent.parent)
     result = subprocess.run(
         [sys.executable, "-B", "-c", script, str(tmp_path / "minimal demo")],
         capture_output=True, text=True, env=env, timeout=60,

@@ -1,7 +1,7 @@
 // @ts-expect-error Vite raw source import uses the actual standalone demo fixture.
-import pilotReview from '../../../proharness/demo_data/pilot-review.md?raw';
+import pilotReview from '../../../hunter_gatherer/demo_data/pilot-review.md?raw';
 // @ts-expect-error Vite raw source import uses the actual standalone demo fixture.
-import pilotPlan from '../../../proharness/demo_data/pilot-plan-v2.md?raw';
+import pilotPlan from '../../../hunter_gatherer/demo_data/pilot-plan-v2.md?raw';
 import {findPacket,appendFindPage,findResultsHeading,packetContextReferences,passageExcerpt,passageLocation} from './evidenceWorkspace';
 import {describe,it,expect} from 'vitest';
 import {assessmentLabel,citationReference,retrievalPathReference,collectionBody,normalizeRequirements,referenceCitation,reviewsForReferences,updateCollectionReview,uniqueReferences,type Collection} from './evidenceWorkspace';
@@ -76,6 +76,26 @@ describe('Exact loaded context references',()=>{
 
 
 describe('Display-only source excerpts',()=>{
+ it('retains a later qualification and does not emphasize an unmeasured target',()=>{
+  const quote='Stonebridge battery trial\n\nThe Stonebridge goal was two hundred hours of battery life. Three prototype units were assembled. Technicians checked the casing dimensions. No endurance measurements were collected, so that goal remains untested.';
+  const result=passageExcerpt(quote,'Did Stonebridge reach two hundred hours of battery life?');
+  expect(result.text).toContain('No endurance measurements were collected');
+  expect(result.focusStart).toBeUndefined();
+  expect(quote).toContain(result.text);
+ });
+ it('does not emphasize a plain title when only the subject of a paraphrase matches',()=>{
+  const quote='Marigold visitor instructions\n\nRiders may leave bicycles in the rear courtyard. Bring a personal lock because the reception desk cannot lend one. The front steps are reserved for pedestrians during opening hours.';
+  const result=passageExcerpt(quote,'Where is cycle parking at Marigold?');
+  expect(result.text).toContain('Riders may leave bicycles in the rear courtyard.');
+  expect(result.focusStart).toBeUndefined();
+ });
+ it.each(['\n','\r\n'])('recognizes a plain initial title and retains the whole matching paragraph with %j newlines',(newline)=>{
+  const quote=('Fennel office contact sheet\n\nThe reception telephone number is 01400 123456. The office has an entrance facing the square. Its address is printed on all appointment letters. Deliveries should use the side door.').replaceAll('\n',newline);
+  const result=passageExcerpt(quote,'What is the Fennel reception telephone number?');
+  expect(result.text).not.toContain('contact sheet');
+  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('The reception telephone number is 01400 123456.');
+  expect(result.text).toContain('Deliveries should use the side door.');
+ });
  it('selects a raw contiguous window near matching text and keeps adjacent qualifications and negation',()=>{
   const prefix='# Project archive\n\n'+('Catalog entry for unrelated administrative material. '.repeat(24));
   const context='The following sentence describes an earlier proposal, not the final decision. The weekly review planned to approve the launch. It did not approve the launch because the safety checks failed. The next review will revisit those unresolved checks.';
@@ -94,24 +114,29 @@ describe('Display-only source excerpts',()=>{
 
 
 describe('Compact source result presentation',()=>{
- it('focuses a short document on the matching sentence without title/disclaimer noise',()=>{
+ it('keeps the matching paragraph without title/disclaimer noise or hiding qualifications',()=>{
   const quote=pilotPlan as string;
   const result=passageExcerpt(quote,"What is the Lantern pilot's weekly review schedule?");
-  expect(result.clipped).toBe(true);expect(result.text.length).toBeLessThan(240);expect(result.text).not.toContain('Fictional source');
-  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('The weekly review remains Tuesday at 10:00 UTC.');
+  expect(result.clipped).toBe(true);expect(result.text.length).toBeLessThan(800);expect(result.text).not.toContain('Fictional source');
+  expect(result.text).toContain('The weekly review remains Tuesday at 10:00 UTC.');
+  expect(result.text).toContain('No measured completion-time result has been recorded.');
+  expect(result.focusStart).toBeUndefined();
   expect(quote).toContain(result.text);
   const owner=passageExcerpt(quote,'Who is the Lantern pilot owner?');
   expect(owner.text).toContain('Lantern pilot owner,\neffective 2030-04-08.');
  });
- it('prefers a matching body sentence over a heading containing repeated subject terms',()=>{
+ it('prefers matching body context over a heading without emphasizing a weak match',()=>{
   const result=passageExcerpt(pilotReview as string,"What is the Lantern pilot's weekly review schedule?");
-  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('Rowan Finch held the Tuesday review.');
+  expect(result.text).toContain('Rowan Finch held the Tuesday review.');
+  expect(result.focusStart).toBeUndefined();
   expect(result.text).not.toContain('# Lantern');expect(pilotReview).toContain(result.text);
  });
  it('does not focus standalone date metadata when the body answers the question',()=>{
   const source='# Pilot review\nDate: Tuesday review\n\n'+('Archival context. '.repeat(8))+'The Tuesday review starts at 10:00 UTC. The schedule may change.';
   const result=passageExcerpt(source,'Tuesday review');
-  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('The Tuesday review starts at 10:00 UTC.');
+  expect(result.text).toContain('The Tuesday review starts at 10:00 UTC.');
+  expect(result.text).not.toContain('Date: Tuesday review');
+  expect(result.focusStart).toBeUndefined();
  });
  it('does not repeat a version named in a source title or section, but keeps historical status',()=>{
   const source={document_id:'d',chunk_id:'c',citation:'[doc:d#c]',quote:'Exact wording',title:'Lantern pilot plan — version 2',version:2,location:{section:'Lantern pilot plan — version 2'}};
@@ -125,7 +150,7 @@ describe('Authenticity questions select source-status wording',()=>{
  const focused=(quote:string,query:string)=>{
   const result=passageExcerpt(quote,query);
   expect(quote).toContain(result.text);
-  return {result,focus:result.text.slice(result.focusStart,result.focusEnd)};
+  return {result,focus:result.focusStart===undefined?undefined:result.text.slice(result.focusStart,result.focusEnd)};
  };
  it.each([pilotPlan,pilotReview])('uses the fictional-source statement in the demo rather than subject-name matches',quote=>{
   const {result,focus}=focused(quote as string,'is the lantern pilot real or no');
@@ -140,10 +165,11 @@ describe('Authenticity questions select source-status wording',()=>{
   ['Is the Borealis initiative not real?', 'The Borealis initiative is not fictional.'],
   ['Can you verify whether the Borealis initiative is genuine?', 'This is an authentic account of a real project.'],
   ['Does the Borealis initiative actually exist?', 'This is a made-up scenario for training.'],
- ])('focuses relevant status language for %s without changing its polarity',(query,status)=>{
+ ])('retains status language and its qualification for %s without changing polarity',(query,status)=>{
   const quote='# Borealis initiative\n\n'+status+' The description covers only the documented scenario.\n\nThe Borealis initiative coordinator changed in April. The Borealis initiative review is on Friday.';
   const {result,focus}=focused(quote,query);
-  expect(focus).toBe(status);
+  expect(result.text).toContain(status);
+  expect(focus).toBeUndefined();
   expect(result.text).toContain('The description covers only the documented scenario.');
  });
  it.each([
@@ -152,8 +178,10 @@ describe('Authenticity questions select source-status wording',()=>{
   ['Are the Orchid measurements synthetic data?', 'The records were generated for testing; no real people participated.'],
  ])('recognizes generated/demo data wording for %s',(query,status)=>{
   const quote='# Orchid measurements\n\nThe Orchid measurements have a revised catalog and a new owner.\n\n'+status+' Values illustrate the workflow only. The catalog has three columns and is refreshed every Tuesday.';
-  const {focus}=focused(quote,query);
-  expect(focus).toBe(status);
+  const {result,focus}=focused(quote,query);
+  expect(result.text).toContain(status);
+  expect(result.text).toContain('Values illustrate the workflow only.');
+  expect(focus).toBeUndefined();
  });
  it('does not let an authenticity adjective replace a scheduling question',()=>{
   const quote='# Borealis initiative\n\nFictional source. Every named organization is invented. The weekly review is Tuesday at 10:00 UTC. The review time may change.';
@@ -163,7 +191,9 @@ describe('Authenticity questions select source-status wording',()=>{
  it('does not treat real-time or a synthetic material as a source authenticity question',()=>{
   const quote='# Laboratory notes\n\nFictional source. All named people are invented. Synthetic fuel is safe only under the listed operating limits. Real-time measurements arrive every Tuesday. Follow the documented handling process.';
   expect(focused(quote,'Is synthetic fuel safe?').focus).toBe('Synthetic fuel is safe only under the listed operating limits.');
-  expect(focused(quote,'When do real-time measurements arrive?').focus).toBe('Real-time measurements arrive every Tuesday.');
+  const realtime=focused(quote,'When do real-time measurements arrive?');
+  expect(realtime.result.text).toContain('Real-time measurements arrive every Tuesday.');
+  expect(realtime.focus).toBeUndefined();
  });
  it('does not reinterpret a request to verify the real cost as a fictionality check',()=>{
   const quote='# Workshop budget\n\nFictional source. Every named organization is invented. The real cost of the Borealis initiative is estimated at 200 units. The estimate excludes tax and delivery.';
@@ -178,7 +208,7 @@ describe('Authenticity questions select source-status wording',()=>{
   const qualification='It is based on observations from an earlier study, not its named participants.';
   const quote='# Juniper case study\n\nAuthor: Research team\n\nThis case study is fictional. '+qualification+'\n\nVersion: 3\n\nThe study files are catalogued separately.';
   const {result,focus}=focused(quote,'Is the Juniper case study real?');
-  expect(focus).toBe('This case study is fictional.');
+  expect(focus).toBeUndefined();
   expect(result.text).toBe('This case study is fictional. '+qualification);
   expect(result.leading).toBe(true);
   expect(result.trailing).toBe(true);

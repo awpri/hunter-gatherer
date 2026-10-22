@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from proharness.backup import create_backup, restore_backup, verify_backup
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.import_jobs import ImportJobs
-from proharness.memory.schemas import Memory
-from proharness.memory.store import MemoryStore
+from hunter_gatherer.backup import create_backup, restore_backup, verify_backup
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.import_jobs import ImportJobs
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.store import MemoryStore
 
 
 @pytest.mark.parametrize("state", ["pending", "running", "failed", "cancelled"])
@@ -273,7 +273,7 @@ def test_backup_refuses_unmanaged_original_and_removes_staging(store, tmp_path):
     with pytest.raises(ValueError, match="managed archive"):
         create_backup(store.settings.sqlite_path, bundle)
     assert not bundle.exists()
-    assert not list(tmp_path.glob(".proharness-backup-*"))
+    assert not list(tmp_path.glob(".hunter-gatherer-backup-*"))
 
 
 def test_valid_hash_does_not_hide_database_corruption(tmp_path):
@@ -298,12 +298,12 @@ def test_restore_failure_cleans_only_its_created_archive(tmp_path, monkeypatch):
         Path(dst).write_text("another process owns this")
         raise FileExistsError("concurrent creation")
 
-    monkeypatch.setattr("proharness.backup.os.link", conflict)
+    monkeypatch.setattr("hunter_gatherer.backup.os.link", conflict)
     with pytest.raises(FileExistsError):
         restore_backup(bundle, target)
     assert target.read_text() == "another process owns this"
     assert not Path(str(target) + ".archive").exists()
-    assert not list(tmp_path.glob(".proharness-restore-*"))
+    assert not list(tmp_path.glob(".hunter-gatherer-restore-*"))
 
 
 def test_cannot_restore_inside_verified_backup(tmp_path):
@@ -317,10 +317,10 @@ def test_cannot_restore_inside_verified_backup(tmp_path):
 
 def test_sqlite_vec_live_store_recovers_search_without_reembedding(tmp_path):
     pytest.importorskip("sqlite_vec")
-    from proharness.config import Settings
-    from proharness.memory.embeddings import HashingEmbedder
-    from proharness.memory.store import MemoryStore
-    from proharness.memory.vec_sqlite import SqliteVecBackend
+    from hunter_gatherer.config import Settings
+    from hunter_gatherer.memory.embeddings import HashingEmbedder
+    from hunter_gatherer.memory.store import MemoryStore
+    from hunter_gatherer.memory.vec_sqlite import SqliteVecBackend
 
     source, target, bundle = tmp_path / "source.db", tmp_path / "target.db", tmp_path / "backup"
     embedder = HashingEmbedder(dim=128)
@@ -338,7 +338,7 @@ def test_sqlite_vec_live_store_recovers_search_without_reembedding(tmp_path):
     with MemoryStore(restored_settings, embedder=embedder) as store:
         assert isinstance(store._backend, SqliteVecBackend)
         assert store.vector_search("community garden", top_k=1)[0].id == fact.id
-        from proharness.memory.lexical_sqlite import lexical_candidates
+        from hunter_gatherer.memory.lexical_sqlite import lexical_candidates
         assert lexical_candidates(store, 'community', 10) == [fact.id]
         assert DocumentArchive(store).search_indexed('volunteers')['hits'][0]['document_id'] == archived['document_id']
         doc = DocumentArchive(store).get_document(archived["document_id"])
@@ -366,7 +366,7 @@ def test_archive_relocation_rejects_unknown_or_forged_trigger(store, tmp_path, s
 
 
 def test_known_title_trigger_archive_restore_without_fts_or_vec_extension(store, tmp_path):
-    from proharness.memory.document_search import ARCHIVE_FTS_TITLE_TRIGGER_SQL
+    from hunter_gatherer.memory.document_search import ARCHIVE_FTS_TITLE_TRIGGER_SQL
     archive = DocumentArchive(store)
     source = tmp_path / 'document.txt'
     source.write_text('Restored sienna pigment evidence.')
@@ -388,7 +388,7 @@ def test_known_title_trigger_archive_restore_without_fts_or_vec_extension(store,
 
 @pytest.mark.parametrize("dirty", [False, True])
 def test_bounded_derived_index_and_pending_work_survive_plain_restore(store, tmp_path, dirty):
-    from proharness.memory.bounded_retrieval import DOCUMENT_TRIGGERS, ensure_index, sync_index
+    from hunter_gatherer.memory.bounded_retrieval import DOCUMENT_TRIGGERS, ensure_index, sync_index
     archive = DocumentArchive(store)
     source = tmp_path / "document.txt"
     source.write_text("Preserved azure pigment evidence.")
@@ -418,7 +418,7 @@ def test_bounded_derived_index_and_pending_work_survive_plain_restore(store, tmp
 
 @pytest.mark.parametrize("name", ["archive_rank_doc_insert", "archive_rank_doc_delete", "archive_rank_doc_update"])
 def test_forged_bounded_document_trigger_is_rejected(store, tmp_path, name):
-    from proharness.memory.bounded_retrieval import ensure_index
+    from hunter_gatherer.memory.bounded_retrieval import ensure_index
     archive = DocumentArchive(store)
     source = tmp_path / "document.txt"
     source.write_text("Original preserved evidence.")

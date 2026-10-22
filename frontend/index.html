@@ -8,7 +8,7 @@
       (() => {
         const d = document.documentElement;
         let p = {};
-        try { p = JSON.parse(localStorage.getItem('proharness.appearance.v1') || '{}') || {}; } catch {}
+        try { p = JSON.parse(localStorage.getItem('hunter_gatherer.appearance.v1') || '{}') || {}; } catch {}
         const valid = (key, choices, fallback) => choices.includes(p[key]) ? p[key] : fallback;
         const theme = valid('theme', ['dark','light','system'], 'dark');
         d.dataset.theme = theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;

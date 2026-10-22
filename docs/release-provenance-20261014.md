@@ -1,49 +1,56 @@
-# Release provenance review — 2026-10-14
+# Release provenance review
 
-This is a finite local review of the exporter allowlist, not publication approval.
-The final manifest and build/install/restore results must accompany the exact
-candidate. This document deliberately contains no private corpus names, source
-paths, questions, conversations or credential values.
+This record began with the source-export review on 2026-10-14 and was updated for
+the `0.1.0a1` public alpha. It describes a finite publication boundary; the exact
+release manifest and verification reports identify what was actually shipped.
+It contains no private corpus names, questions, conversations or credentials.
 
 ## Selected content and provenance
 
-- Runtime Python: project implementation selected under `proharness`, excluding
-  evaluation modules. The owner selected Apache 2.0 for hunter/gatherer on
-  2026-10-20. Original ProHarness attribution is retained in NOTICE.
-- Demo Markdown: purpose-written fictional Lantern project inputs with versioned
-  plans, an owner correction and explicitly unknown outcomes. No user library
-  documents are used.
-- Tests: the exporter's `PUBLIC_TESTS` tuple is the precise reviewed boundary.
-  Configuration values, garden/recipe/store examples, recovery documents and
-  Lantern inputs are inline synthetic cases or generated in temporary directories.
-  They use the shared hermetic fixture, hashing embeddings and temporary SQLite
-  stores. Optional SQLite-vector tests may skip without their extra. The export
-  does not include real-library evaluation anchors or personal-source fixtures.
-- Frontend: project source and lockfile plus current packaged assets. Geist and
-  Geist Mono have a bundled SIL Open Font License 1.1 notice identifying the Geist
-  Project Authors (2024). Lucide's bundled notice includes ISC attribution and
-  the retained MIT notice for identified Feather derivatives by Cole Bemis.
-  Both font files and these full notices are explicit exporter entries. The
-  notices were inspected locally; this does not establish a complete dependency
-  rights audit or ownership of every generated frontend bundle.
-- Documentation: this guide, this provenance record, the fictional demo guide,
-  coordination README and example research skill were reviewed as self-contained
-  instructions. The exported README derives from the public guide rather than
-  carrying links to excluded development reports. Public docs do not reproduce
-  private evaluation results. The example skill is inert packaged text.
+- **Runtime Python:** project implementation under `hunter_gatherer`, excluding
+  private development evaluation modules. The public distribution is
+  `hunter-gatherer`. Original ProHarness attribution is retained in NOTICE.
+- **Fictional demo:** purpose-written Lantern Markdown sources contain versioned
+  plans, an owner correction and explicitly unknown outcomes. They do not come
+  from a personal library.
+- **Tests and retrieval fixtures:** the exporter's explicit allowlists define
+  which tests and synthetic fixtures ship. Examples are authored fictional cases
+  or generated in temporary directories. Hermetic tests use isolated SQLite and
+  hashing by default. Optional semantic measurements use an explicitly selected
+  model/cache and are not private-library quality claims. Real-library anchors
+  and personal-source fixtures remain excluded.
+- **Frontend:** project source, lockfile and rebuilt packaged assets. Geist and
+  Geist Mono retain their SIL Open Font License 1.1 notice, identifying the Geist
+  Project Authors (2024). Lucide's notice retains ISC attribution and the MIT
+  notice for identified Feather derivatives by Cole Bemis. Font files and full
+  notices are explicit exporter entries. Their inclusion is not a complete
+  audit of every transitive dependency's rights.
+- **Documentation:** the public README and guides are maintained directly and
+  selected by the exporter, including terminal/MCP setup, the fictional demo,
+  compatibility boundaries and release verification. Public guides do not
+  reproduce private evaluation reports. The packaged example research skill is
+  inert documentation, not an instruction executed during installation.
 
-## License and remaining gates
+## License and isolation
 
-The root LICENSE contains the official Apache License 2.0 text, selected by the
-owner for hunter/gatherer on 2026-10-20. NOTICE retains original project and
-third-party attribution. This choice does not relicense upstream dependencies.
-The hunter/gatherer checkout, preview data and release export are separate from
-the original ProHarness installation; the original project remains unchanged.
+The owner selected Apache License 2.0 for hunter/gatherer on 2026-10-20.
+[LICENSE](../LICENSE) contains its full text; [NOTICE](../NOTICE) preserves
+original project and third-party attribution. This does not relicense dependencies.
 
-Before publication, verify the exact exported wheel/sdist and fresh installation,
-backup/restore and asset resolution; execute the prepared platform matrix or
-state its unverified cells; obtain owner approval for release. Narrow scanner
-success is only a triage result. Publishing existing Git history remains outside
-this route: use a fresh repository from the reviewed export without importing
-private development history. No release, staging, push or history deletion is
-performed by these preparation scripts.
+The public checkout, preview libraries and exported packages are separate from
+the original ProHarness installation. Its personal database, credentials and
+configuration are not release content. Compatibility preserves historical source
+identifiers and export formats; it does not authorize automatic migration.
+
+## Verification boundary
+
+The public repository was established from reviewed exported source rather than
+private development history. Release updates must retain that boundary. Export,
+hygiene and build scripts do not themselves publish code, switch repository
+visibility, migrate a personal library or change an active client's configuration.
+
+For each release, inspect the exact source manifest, wheel/sdist, fresh installed
+workflow, backup/restore, packaged assets and platform results. Record skipped or
+unverified cases. Narrow scanner success and synthetic test results do not
+establish universal security, retrieval quality or rights clearance. See
+[release verification](public-release-guide.md) for the concrete checks.

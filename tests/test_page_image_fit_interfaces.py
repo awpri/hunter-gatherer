@@ -13,15 +13,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_document_page_image_transport import _png, _wire_call
 
-from proharness.mcp.server import build_server
-from proharness.mcp.tools import call_tool
-from proharness.server.routers.library_sources import router
+from hunter_gatherer.mcp.server import build_server
+from hunter_gatherer.mcp.tools import call_tool
+from hunter_gatherer.server.routers.library_sources import router
 
 
 @pytest.fixture
 def interfaces(store, monkeypatch):
     harness = SimpleNamespace(store=store, settings=store.settings, loop=SimpleNamespace())
-    server, _ = build_server(harness=harness)
+    server, _ = build_server(harness=harness, tool_profile="full")
     app = FastAPI()
     app.state.library_harness = harness
     app.include_router(router, prefix="/api/library")
@@ -50,7 +50,7 @@ def interfaces(store, monkeypatch):
                 "width": 1024, "height": 768, "image_bytes": len(png), "mime_type": "image/png",
                 "render": render, "_image_png": png, "_source_path": "/private/synthetic-source.pdf"}
 
-    monkeypatch.setattr("proharness.memory.document_page_image.document_page_image", image_backend)
+    monkeypatch.setattr("hunter_gatherer.memory.document_page_image.document_page_image", image_backend)
     return harness, server, app, calls, png, reference
 
 
@@ -132,7 +132,7 @@ def test_http_rejects_nonliteral_fit_and_preserves_privacy_validation(interfaces
 
 def test_capability_reports_opt_in_without_rendering(interfaces):
     harness, _, _, calls, _, _ = interfaces
-    capability = call_tool(harness, "proharness_status", {})["capabilities"]["document_page_image"]
+    capability = call_tool(harness, "hg_status", {})["capabilities"]["document_page_image"]
     assert capability["default_fit_to_byte_limit"] is False
     assert capability["byte_limit_fitting"] == {
         "explicit_opt_in": True, "max_attempts": 4, "retry_max_sides": [1536, 1024, 512],
@@ -145,7 +145,7 @@ def test_real_noise_pdf_fit_through_native_mcp_and_http(store, tmp_path):
     image_module = pytest.importorskip("PIL.Image")
     from test_page_image_fit_worker import noisy_pdf
 
-    from proharness.memory.documents import DocumentArchive
+    from hunter_gatherer.memory.documents import DocumentArchive
 
     # Fixed synthetic raster exercises actual PDFium and bounded PNG encoding.
     source = tmp_path / "deterministic-noise.pdf"
@@ -156,7 +156,7 @@ def test_real_noise_pdf_fit_through_native_mcp_and_http(store, tmp_path):
     expected_reference = {"document_id": did, "version": document["version"],
                           "original_content_hash": hashlib.sha256(original).hexdigest(), "page": 1}
     harness = SimpleNamespace(store=store, settings=store.settings, loop=SimpleNamespace())
-    server, _ = build_server(harness=harness)
+    server, _ = build_server(harness=harness, tool_profile="full")
     app = FastAPI()
     app.state.library_harness = harness
     app.include_router(router, prefix="/api/library")

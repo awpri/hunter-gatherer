@@ -1,10 +1,10 @@
 """Weak bodies stay recoverable; useful detail, paraphrase and scope survive."""
 from types import SimpleNamespace
 
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.output_budget import output_bytes
-from proharness.memory.schemas import Memory
-from proharness.memory.simple_search import _focused_references, find
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.output_budget import output_bytes
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.simple_search import _focused_references, find
 
 
 def test_focused_body_and_semantic_escape_hatch():

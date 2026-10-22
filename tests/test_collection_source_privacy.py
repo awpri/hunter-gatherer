@@ -3,18 +3,18 @@ import json
 
 import pytest
 
-from proharness.coordination import CoordinationError, CoordinationStore
-from proharness.memory.collection_compact import expand_collection_export
-from proharness.memory.collection_references import get_collection_references
-from proharness.memory.document_originals import load_document_original
-from proharness.memory.document_visibility import document_reference_states
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.library_collections import (
+from hunter_gatherer.coordination import CoordinationError, CoordinationStore
+from hunter_gatherer.memory.collection_compact import expand_collection_export
+from hunter_gatherer.memory.collection_references import get_collection_references
+from hunter_gatherer.memory.document_originals import load_document_original
+from hunter_gatherer.memory.document_visibility import document_reference_states
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.library_collections import (
     export_collection, get_collection, list_collections, save_collection,
 )
-from proharness.memory.reference_fetch import fetch_references
-from proharness.memory.schemas import Memory
-from proharness.server.routers.library_sources import CollectionInput
+from hunter_gatherer.memory.reference_fetch import fetch_references
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.server.routers.library_sources import CollectionInput
 
 
 def ingest(archive, path, text):
@@ -129,7 +129,7 @@ def test_coordination_batches_direct_chunk_privacy_once(store, tmp_path, monkeyp
     archive = DocumentArchive(store)
     _, first = ingest(archive, tmp_path / "a.md", "First garden source.")
     _, second = ingest(archive, tmp_path / "b.md", "Second garden source.")
-    import proharness.memory.document_visibility as visibility
+    import hunter_gatherer.memory.document_visibility as visibility
     calls = []
     actual = visibility.document_reference_states
     monkeypatch.setattr(visibility, "document_reference_states",

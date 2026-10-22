@@ -11,13 +11,13 @@ hunt demo serve /absolute/path/lantern-demo --port 8767
 The target must be absent or empty. Creation refuses an occupied directory,
 including an existing demo. Pick another empty directory to repeat the exercise.
 The demo uses local SQLite and deterministic HashingEmbedder(384). Creation and
-its dedicated restart command ignore ambient environment settings and `.env`.
+its dedicated restart command ignore ambient environment settings and configuration files.
 They do not download embedding models or call model providers. Hashing embeddings
 are a workflow demonstration, not a semantic retrieval quality benchmark.
 
 Open the local library at `http://127.0.0.1:8767`. Connect an MCP client using the
 streamable HTTP endpoint `http://127.0.0.1:8767/mcp`. Keep using `demo serve` for
-restarts; ordinary `serve` uses your normal configuration. A connected assistant
+restarts; `hunt serve DIR` expects an initialized personal library. A connected assistant
 may use its own model service to answer questions; the demo server itself does not.
 
 Every source, person and organization is fictional. `manifest.json` lists the
@@ -54,6 +54,9 @@ Find → Open → saved collection → restart, backup/restore and UI assets. Se
 and platform limits.
 Demo startup and offline workflow tests reject outbound socket connections and
 prove ambient store settings are ignored.
+
+For your own files, use `hunt init ./my-library`, import into that directory, and
+start `hunt serve ./my-library --port 8767`. See [personal library setup](getting-started.md).
 
 Original PDF images require the optional `document-view` extra, and OCR/layout
 recovery requires separate optional setup. Neither is needed for this text demo.

@@ -17,11 +17,11 @@ from mcp.shared.memory import create_client_server_memory_streams
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, NameObject
 
-from proharness.mcp.server import build_server
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.library_collections import save_collection
-from proharness.memory.original_page_reference import original_page_citation
-from proharness.server.routers.library_sources import CollectionInput
+from hunter_gatherer.mcp.server import build_server
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.library_collections import save_collection
+from hunter_gatherer.memory.original_page_reference import original_page_citation
+from hunter_gatherer.server.routers.library_sources import CollectionInput
 
 
 def payload(result):
@@ -41,10 +41,10 @@ async def recover_and_inspect(server, collection, reference):
         async with ClientSession(*client_streams) as client:
             await client.initialize()
             listed = await client.list_tools()
-            assert {"proharness_artifact", "proharness_fetch", "proharness_document_page_image",
-                    "proharness_check_attribution"} <= {tool.name for tool in listed.tools}
+            assert {"hg_artifact", "hg_fetch", "hg_document_page_image",
+                    "hg_check_attribution"} <= {tool.name for tool in listed.tools}
 
-            recovered = payload(await client.call_tool("proharness_artifact", {
+            recovered = payload(await client.call_tool("hg_artifact", {
                 "action": "collection_refs", "artifact_id": collection["id"], "revision": 1}))
             assert recovered["total_references"] == 1 and recovered["next_offset"] is None
             occurrence = recovered["references"][0]
@@ -54,7 +54,7 @@ async def recover_and_inspect(server, collection, reference):
             citation = occurrence["citation"]
             assert citation == original_page_citation(reference)
 
-            fetched = payload(await client.call_tool("proharness_fetch", {"refs": [citation]}))
+            fetched = payload(await client.call_tool("hg_fetch", {"refs": [citation]}))
             assert fetched["statuses"] == ["available"] and len(fetched["sources"]) == 1
             source = fetched["sources"][0]
             assert source["kind"] == "original_page" and source["source_reference"] == reference
@@ -64,7 +64,7 @@ async def recover_and_inspect(server, collection, reference):
             assert source["followup"] == occurrence["followup"]
 
             followup = source["followup"]
-            assert followup["tool"] == "proharness_document_page_image"
+            assert followup["tool"] == "hg_document_page_image"
             image_result = await client.call_tool(followup["tool"], {**followup["arguments"], "max_side": 512})
             assert not image_result.is_error, image_result.content
             assert [item.type for item in image_result.content] == ["text", "image"]
@@ -84,7 +84,7 @@ async def recover_and_inspect(server, collection, reference):
             with Image.open(BytesIO(png)) as pixels:
                 assert pixels.convert("RGB").getpixel((pixels.width // 2, pixels.height // 2)) == (0, 0, 255)
 
-            attribution = payload(await client.call_tool("proharness_check_attribution", {
+            attribution = payload(await client.call_tool("hg_check_attribution", {
                 "answer": "The second page has a blue field. " + citation, "verify_support": False}))
             assert attribution["citation_status"] == "inspection_required"
             assert attribution["support_status"] == "unverified" and attribution["cacheable"] is False
@@ -119,8 +119,8 @@ def test_zero_chunk_pdf_collection_recovery_native_image_and_attribution_protoco
         notes="Actor observation pending inspection.", idempotency_key="native-mcp-page-workflow"))
     assert collection["schema_version"] == 2 and collection["references"] == [reference]
     assert "quote" not in json.dumps(collection)
-    monkeypatch.setattr("proharness.memory.attribution.make_attribution_judge",
+    monkeypatch.setattr("hunter_gatherer.memory.attribution.make_attribution_judge",
                         lambda *args, **kwargs: pytest.fail("Metadata-only pages must not create a support judge"))
     harness = SimpleNamespace(store=store, settings=store.settings, loop=SimpleNamespace())
-    server, _ = build_server(harness=harness)
+    server, _ = build_server(harness=harness, tool_profile="full")
     asyncio.run(recover_and_inspect(server, collection, reference))

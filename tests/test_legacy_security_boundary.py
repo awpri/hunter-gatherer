@@ -6,9 +6,9 @@ from fastapi import FastAPI, WebSocket
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from proharness.config import Settings
-from proharness.server.app import build_app
-from proharness.server.auth import SingleTokenMiddleware
+from hunter_gatherer.config import Settings
+from hunter_gatherer.server.app import build_app
+from hunter_gatherer.server.auth import SingleTokenMiddleware
 
 
 def settings(**kwargs):
@@ -118,8 +118,8 @@ def test_static_fallback_confines_traversal_absolute_paths_and_symlinks(tmp_path
 def test_cli_effective_bind_matches_boundary(monkeypatch):
     import uvicorn
 
-    import proharness.server.app as app_module
-    from proharness import cli
+    import hunter_gatherer.server.app as app_module
+    from hunter_gatherer import cli
     value = settings()
     seen = {}
     def build(effective):
@@ -147,12 +147,12 @@ def test_lan_navigation_cookie_supports_assets_and_websocket():
 
 
 def test_lifespan_token_generation_reaches_existing_middleware(monkeypatch, tmp_path):
-    import proharness.loop
-    import proharness.pipelines.scheduler
+    import hunter_gatherer.loop
+    import hunter_gatherer.pipelines.scheduler
     value = settings(ui_lan_mode=True, ui_token='', sqlite_path=str(tmp_path / 'unused.db'))
     fake = SimpleNamespace(store=SimpleNamespace(count=lambda:0), close=lambda:None)
-    monkeypatch.setattr(proharness.loop, 'AgentLoop', lambda settings:fake)
-    monkeypatch.setattr(proharness.pipelines.scheduler, 'PipelineScheduler',
+    monkeypatch.setattr(hunter_gatherer.loop, 'AgentLoop', lambda settings:fake)
+    monkeypatch.setattr(hunter_gatherer.pipelines.scheduler, 'PipelineScheduler',
                         lambda loop:SimpleNamespace(start=lambda:None, stop=lambda:None))
     app = build_app(value)
     with TestClient(app) as client:

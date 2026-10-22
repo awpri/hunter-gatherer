@@ -5,7 +5,7 @@ from copy import deepcopy
 from test_document_page_image import ingest
 from test_page_image_fit_backend import fitted_result
 
-backend = importlib.import_module("proharness.memory.document_page_image")
+backend = importlib.import_module("hunter_gatherer.memory.document_page_image")
 
 
 def failed_history():

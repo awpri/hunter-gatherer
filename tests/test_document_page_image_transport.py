@@ -17,14 +17,14 @@ from mcp.client.session import ClientSession
 from mcp.shared.memory import create_client_server_memory_streams
 from pypdf import PdfWriter
 
-from proharness.mcp.server import build_server
-from proharness.mcp.tools import serialize_result
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.library_activity import poll_activity
-from proharness.server.routers.library_sources import router
-from proharness.tools.archive import ARCHIVE_TOOL_NAMES
+from hunter_gatherer.mcp.server import build_server
+from hunter_gatherer.mcp.tools import serialize_result
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.library_activity import poll_activity
+from hunter_gatherer.server.routers.library_sources import router
+from hunter_gatherer.tools.archive import ARCHIVE_TOOL_NAMES
 
-NAME = "proharness_document_page_image"
+NAME = "hg_document_page_image"
 
 
 def _png(width=16, height=12):
@@ -45,7 +45,7 @@ def image_transport(store, tmp_path, monkeypatch):
         writer.write(stream)
     document = DocumentArchive(store).ingest(str(source))
     harness = SimpleNamespace(store=store, settings=store.settings, loop=SimpleNamespace())
-    server, _ = build_server(harness=harness)
+    server, _ = build_server(harness=harness, tool_profile="full")
     app = FastAPI()
     app.state.library_harness = harness
     app.include_router(router, prefix="/api/library")
@@ -59,7 +59,7 @@ def image_transport(store, tmp_path, monkeypatch):
         return {"page_count": 2, "width": 16, "height": 12, "_image_png": png,
                 "render": {"renderer": "synthetic-test", "ocr": False}}
 
-    monkeypatch.setattr("proharness.memory.document_page_image._worker_render", render)
+    monkeypatch.setattr("hunter_gatherer.memory.document_page_image._worker_render", render)
     return document, harness, server, app, png
 
 
@@ -126,7 +126,7 @@ def test_mcp_sdk_rejects_invalid_options(image_transport, changes):
 def test_http_json_png_and_original_shared_loader(image_transport, monkeypatch):
     document, _, _, app, png = image_transport
     did = document["document_id"]
-    from proharness.memory import document_originals
+    from hunter_gatherer.memory import document_originals
     original_loader = document_originals.load_document_original
     observed = []
     def loader(*args, **kwargs):
@@ -209,7 +209,7 @@ def test_real_renderer_png_reaches_mcp_and_http(store, tmp_path):
         writer.write(stream)
     document = DocumentArchive(store).ingest(str(source))
     harness = SimpleNamespace(store=store, settings=store.settings, loop=SimpleNamespace())
-    server, _ = build_server(harness=harness)
+    server, _ = build_server(harness=harness, tool_profile="full")
     args = {"document_id": document["document_id"], "page": 1, "max_side": 512}
     _, result = asyncio.run(_wire_call(server, args))
     assert not result.is_error, result.structured_content
@@ -229,20 +229,20 @@ def test_real_renderer_png_reaches_mcp_and_http(store, tmp_path):
 
 
 def test_status_discovers_page_image_without_checking_runtime_or_rendering(store, monkeypatch):
-    from proharness.mcp.tools import call_tool
+    from hunter_gatherer.mcp.tools import call_tool
 
     def unavailable(*args, **kwargs):
         pytest.fail("Capability discovery must not load originals or launch rendering")
-    monkeypatch.setattr("proharness.memory.document_page_image.load_document_original", unavailable)
-    monkeypatch.setattr("proharness.memory.document_page_image._worker_render", unavailable)
+    monkeypatch.setattr("hunter_gatherer.memory.document_page_image.load_document_original", unavailable)
+    monkeypatch.setattr("hunter_gatherer.memory.document_page_image._worker_render", unavailable)
     harness = SimpleNamespace(store=store, settings=store.settings, loop=SimpleNamespace())
     before = store._sqlite.total_changes
-    result = call_tool(harness, "proharness_status", {})
+    result = call_tool(harness, "hg_status", {})
     capability = result["capabilities"]["document_page_image"]
     assert capability["tool"] == NAME and capability["format"] == "pdf"
     assert capability["runtime_check"] == "not_performed"
     assert capability["explicit_request_required"] is True
-    assert "document-view" in capability["setup"] and "PROHARNESS_PAGE_IMAGE_PYTHON" in capability["setup"]
+    assert "document-view" in capability["setup"] and "HG_PAGE_IMAGE_PYTHON" in capability["setup"]
     assert capability["page_numbering"] == "one_based"
     assert capability["default_max_side"] == 2048
     assert capability["max_side_bounds"] == [512, 3072]

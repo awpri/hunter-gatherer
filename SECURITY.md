@@ -3,7 +3,8 @@
 ## Reporting a vulnerability
 
 Do not include credentials, private library contents or exploit details in a public issue.
-A private reporting channel must be configured and documented before public release.
+Report vulnerabilities through [GitHub's private reporting form](https://github.com/awpri/hunter-gatherer/security/advisories/new).
+Include the affected version, reproduction steps using fictional data, and the expected impact.
 No response deadline is currently promised.
 
 ## System and scope

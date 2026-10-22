@@ -87,7 +87,7 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   const [form, setForm] = useState<'memory' | 'file' | null>(null); const [notice, setNotice] = useState('');
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [recordLayout, setRecordLayout] = useState<'rows' | 'cards'>(() => {
-    try { return localStorage.getItem('proharness.library.layout') === 'cards' ? 'cards' : 'rows'; } catch { return 'rows'; }
+    try { return localStorage.getItem('hunter_gatherer.library.layout') === 'cards' ? 'cards' : 'rows'; } catch { return 'rows'; }
   });
   const {appearance, setAppearance} = useAppearance();
   const closeAppearance = useCallback(() => setAppearanceOpen(false), []);
@@ -108,7 +108,7 @@ function LibraryWorkspace({includePrivate, privacyChange}: {includePrivate: bool
   function healthScanned(report: HealthReport) {const summary = summarizeHealth(report, includePrivate); setHealthSummary(summary); if (overview?.store.id) saveHealthSummary(overview.store.id, summary);}
   const browsing = (view === 'library' && tab !== 'collections' && tab !== 'imports') || view === 'connections';
   useEffect(()=>saveWorkspaceView(view),[view]);
-  useEffect(() => {try {localStorage.setItem('proharness.library.layout', recordLayout);} catch { /* Layout remains usable without storage. */ }}, [recordLayout]);
+  useEffect(() => {try {localStorage.setItem('hunter_gatherer.library.layout', recordLayout);} catch { /* Layout remains usable without storage. */ }}, [recordLayout]);
 
   useEffect(() => {const timeout = setTimeout(() => {setSearch(query.trim()); setOffset(0);}, 220); return () => clearTimeout(timeout);}, [query]);
   useEffect(() => {

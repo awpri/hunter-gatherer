@@ -11,16 +11,16 @@ from pathlib import Path
 import pytest
 from pypdf import PdfWriter
 
-from proharness.coordination import CoordinationError
-from proharness.memory.collection_compact import expand_collection_export
-from proharness.memory.collection_references import get_collection_references
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.library_collections import export_collection, get_collection, save_collection
-from proharness.memory.original_page_reference import original_page_citation
-from proharness.memory.output_budget import output_bytes
-from proharness.memory.schemas import Memory
-from proharness.memory.store import MemoryStore
-from proharness.server.routers.library_sources import CollectionInput, CollectionReviewInput
+from hunter_gatherer.coordination import CoordinationError
+from hunter_gatherer.memory.collection_compact import expand_collection_export
+from hunter_gatherer.memory.collection_references import get_collection_references
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.library_collections import export_collection, get_collection, save_collection
+from hunter_gatherer.memory.original_page_reference import original_page_citation
+from hunter_gatherer.memory.output_budget import output_bytes
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.store import MemoryStore
+from hunter_gatherer.server.routers.library_sources import CollectionInput, CollectionReviewInput
 
 
 def page_source(store, tmp_path, *, sensitive=False, width=240):
@@ -49,7 +49,7 @@ def fixture_png():
 def render_preflight(monkeypatch):
     # This suite checks collection state and handoff identity. The renderer's
     # bytes/page-range/integrity checks have their own original-page tests.
-    import proharness.memory.document_page_image as backend
+    import hunter_gatherer.memory.document_page_image as backend
     monkeypatch.setattr(backend, "_worker_render", lambda data, page, max_side, **kwargs: {
         "page_count": 2, "width": 16, "height": 24, "render": {"renderer": "fixture"},
         "_image_png": fixture_png()})
@@ -64,7 +64,7 @@ def assert_page(item, ref):
     assert item["kind"] == "original_page" and item["source_reference"] == ref
     assert item["citation"] == original_page_citation(ref)
     assert "quote" not in item and item["availability"] == "unchecked"
-    assert item["followup"]["tool"] == "proharness_document_page_image"
+    assert item["followup"]["tool"] == "hg_document_page_image"
     assert item["followup"]["arguments"] == {"document_id": ref["document_id"], "page": 2}
     assert "original_path" not in str(item) and "source_path" not in str(item)
 
@@ -213,7 +213,7 @@ def test_existing_missing_page_original_can_be_reviewed_without_rendering(store,
     saved = create(store, ref)
     managed = Path(store._sqlite.execute("SELECT original_path FROM archive_documents WHERE id=?", (ref["document_id"],)).fetchone()[0])
     managed.unlink()
-    import proharness.memory.document_page_image as backend
+    import hunter_gatherer.memory.document_page_image as backend
     monkeypatch.setattr(backend, "document_page_image", lambda *args, **kwargs: pytest.fail("retained selection must not rerender"))
     changed = save_collection(store, CollectionInput(name=saved["name"], references=[ref], expected_revision=1,
         reviews=[CollectionReviewInput(citation=original_page_citation(ref), status="needs_context",
@@ -239,8 +239,8 @@ def test_removed_historical_page_cannot_be_readded_from_earlier_revision(store, 
 
 @pytest.mark.parametrize("corruption", ["quote", "citation", "followup", "expected_source_reference"])
 def test_compact_codec_refuses_page_quotation_or_changed_exact_navigation(store, tmp_path, corruption):
-    from proharness.memory.collection_compact import compact_collection_export
-    from proharness.memory.output_budget import budget_report
+    from hunter_gatherer.memory.collection_compact import compact_collection_export
+    from hunter_gatherer.memory.output_budget import budget_report
     _, _, ref = page_source(store, tmp_path)
     saved = create(store, ref)
     full = export_collection(store, saved["id"], format="json")
@@ -263,11 +263,11 @@ def test_public_exports_embed_executable_routes_before_serializing(store,tmp_pat
     from types import SimpleNamespace
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from proharness.mcp.library_tools import collection
-    from proharness.server.routers import library
+    from hunter_gatherer.mcp.library_tools import collection
+    from hunter_gatherer.server.routers import library
     _,_,ref=page_source(store,tmp_path,sensitive=True)
     file_ref={key:value for key,value in ref.items() if key!='page'}
-    prose='Source prose mentions proharness_document_page_image; keep these words.'
+    prose='Source prose mentions hg_document_page_image; keep these words.'
     memory=Memory(text=prose)
     store.add(memory)
     saved=save_collection(store,CollectionInput(name='Public routes',references=[ref,file_ref,{'memory_id':memory.id}],
@@ -295,26 +295,26 @@ def test_public_exports_embed_executable_routes_before_serializing(store,tmp_pat
         originals=[item for item in metadata if item.get('kind') in {'original_page','original_file'}]
         assert len(originals)==2
         for item in originals:
-            route=item['followup'];assert route['tool']=='proharness_open'
+            route=item['followup'];assert route['tool']=='hg_open'
             assert route['arguments']['include_sensitive'] is True
             assert route['arguments']['refs'][0].startswith('[page:' if item['kind']=='original_page' else '[file:')
     legacy=export_collection(store,identity,format='json',include_sensitive=True)
-    assert legacy['content']['evidence'][0]['followup']['tool']=='proharness_document_page_image'
+    assert legacy['content']['evidence'][0]['followup']['tool']=='hg_document_page_image'
 
 
 def test_public_recovery_pointer_and_original_routes_remain_bounded(store,tmp_path):
-    from proharness.memory.collection_recovery import add_collection_recovery
-    from proharness.memory.output_budget import budget_report
+    from hunter_gatherer.memory.collection_recovery import add_collection_recovery
+    from hunter_gatherer.memory.output_budget import budget_report
     _,_,ref=page_source(store,tmp_path)
     saved=create(store,ref,key='bounded-public')
     for format in ('markdown','json'):
         result=export_collection(store,saved['id'],format=format,max_tokens=1024,public_tools=True)
         assert output_bytes(result)<=4096
-        assert 'proharness_document_page_image' not in json.dumps(result)
+        assert 'hg_document_page_image' not in json.dumps(result)
     base=budget_report({'format':'json','content':{}},1024)
     recovered=add_collection_recovery(base,[{'citation':original_page_citation(ref)}],identity=saved['id'],
         revision=1,max_tokens=1024,public_tools=True,include_sensitive=True)
     route=recovered['content']['recovery']
-    assert route['tool']=='proharness_collection'
+    assert route['tool']=='hg_collection'
     assert route['arguments']=={'action':'refs','collection_id':saved['id'],'revision':1,'include_sensitive':True}
     assert output_bytes(recovered)<=4096

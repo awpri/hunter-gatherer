@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a private review candidate, never publication or history export.
+"""Prepare a bounded release source candidate, never publish or export history.
 
 Dry run prints a hashed manifest. --destination copies only the manifest into a
 new or empty outside-repository directory after bounded hygiene triage passes.
@@ -39,12 +39,14 @@ PUBLIC_TESTS = (
     "tests/test_original_page_collections.py",
     "tests/test_secure_files.py",
     "tests/test_optional_dependencies.py", "tests/test_setup.py", "tests/test_terminal.py",
+    "tests/test_namespace_compatibility.py", "tests/test_personal_library.py", "tests/test_release_retrieval.py",
 )
-PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json",)
+PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json", "tests/fixtures/release_retrieval/cases.json")
 PUBLIC_DOCS = (
     "docs/public-release-guide.md", "docs/release-provenance-20261014.md", "docs/visual-regions.md",
     "docs/index.md", "docs/getting-started.md", "docs/usage.md", "docs/mcp.md",
-    "docs/cli.md",
+    "docs/cli.md", "docs/retrieval-evaluation-v0.1.0a1.md", "CHANGELOG.md",
+    "docs/assets/alpha-library.png",
     "docs/faq.md", "docs/roadmap.md", "docs/assets/wordmark.svg", "CONTRIBUTING.md", "SECURITY.md",
     ".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml",
     ".github/ISSUE_TEMPLATE/config.yml", ".github/pull_request_template.md",
@@ -58,7 +60,7 @@ def export_bytes(name):
 
 def selected_paths():
     selected = set(PUBLIC_TESTS + PUBLIC_DOCS + PUBLIC_FIXTURES)
-    for path in (ROOT / "proharness").rglob("*.py"):
+    for path in (ROOT / "hunter_gatherer").rglob("*.py"):
         relative = path.relative_to(ROOT)
         if "eval" not in relative.parts and "__pycache__" not in relative.parts:
             selected.add(relative.as_posix())
@@ -70,15 +72,16 @@ def selected_paths():
         "README.md", "pyproject.toml", ".env.example", ".gitignore",
         "frontend/index.html", "frontend/package.json", "frontend/package-lock.json",
         "frontend/tsconfig.json", "frontend/vite.config.ts", "frontend/postcss.config.js",
-        "frontend/tailwind.config.js", "proharness/coordination/README.md",
-        "proharness/skills/examples/research/SKILL.md",
+        "frontend/tailwind.config.js", "hunter_gatherer/coordination/README.md",
+        "hunter_gatherer/skills/examples/research/SKILL.md",
         "scripts/check_publication_hygiene.py", "scripts/export_public_candidate.py",
-        "scripts/smoke_packaged_demo.py", ".github/workflows/packaged-demo.yml", "docs/demo.md",
+        "scripts/smoke_packaged_demo.py", "scripts/smoke_personal_library.py", "scripts/evaluate_release_retrieval.py",
+        ".github/workflows/packaged-demo.yml", "docs/demo.md",
     ])
     selected.update(path.relative_to(ROOT).as_posix()
-                    for path in (ROOT / "proharness/demo_data").glob("*.md"))
+                    for path in (ROOT / "hunter_gatherer/demo_data").glob("*.md"))
     # Include only directly referenced static assets plus explicit third-party notices.
-    for tree in ("proharness/server/static", "proharness/server/library_static"):
+    for tree in ("hunter_gatherer/server/static", "hunter_gatherer/server/library_static"):
         directory = ROOT / tree
         index = directory / "index.html"
         selected.add(index.relative_to(ROOT).as_posix())
@@ -120,9 +123,9 @@ def main():
                     categories[category] = categories.get(category, 0) + 1
             entries.append({"path": name, "bytes": size, "sha256": hashlib.sha256(data).hexdigest()})
         manifest = {
-            "purpose": "private review candidate; not cleared for publication",
+            "purpose": "release source candidate; validation recorded separately",
             "excluded": ["Git history", "agent state", "local MCP configuration", "unreviewed tests", "eval artifacts", "historical docs"],
-            "remaining_gates": ["exact exported artifact build/install/restore verification", "prepared cross-platform matrix execution", "owner approval before publication"],
+            "validation_required": ["exact exported artifact build/install/restore verification", "cross-platform matrix execution", "publication contents and history review"],
             "readme_source": "README.md",
             "reviewed_tests": list(PUBLIC_TESTS),
             "license_file_present": (ROOT / "LICENSE").is_file(),

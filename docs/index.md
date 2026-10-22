@@ -6,7 +6,7 @@ you want to use.
 
 | Guide | Start here when you want to… |
 | --- | --- |
-| [Get started](getting-started.md) | Install from source and try a separate fictional library. |
+| [Get started](getting-started.md) | Install the alpha, create a library and import files. |
 | [Use the terminal](cli.md) | Ask a question, open a citation or return structured evidence to a script. |
 | [Use the library](usage.md) | Search, explore the graph, inspect quotations and save a collection. |
 | [Connect an assistant](mcp.md) | Give an MCP client access to the library. |
@@ -16,6 +16,7 @@ you want to use.
 | [Inspect PDF image regions](visual-regions.md) | Use exact page images, annotated regions and their citations. |
 | [Contribute](../CONTRIBUTING.md) | Develop the interface, run checks or propose a change. |
 | [Verify a release](public-release-guide.md) | Build the exported source, test the installed package and inspect the publication boundary. |
+| [Retrieval evaluation](retrieval-evaluation-v0.1.0a1.md) | Read the alpha's small synthetic search test, results and limitations. |
 
 The [repository README](../README.md) gives an overview. The
 [CI matrix](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)

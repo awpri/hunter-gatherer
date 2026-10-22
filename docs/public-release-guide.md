@@ -1,151 +1,135 @@
-# hunter/gatherer
+# Release verification
 
-**Ask your library. Inspect the evidence. Give your assistant the sources.**
+This guide describes the reproducible source and package boundary for the
+hunter/gatherer public alpha. For installation and normal use, start with
+[Get started](getting-started.md).
 
-hunter/gatherer (h/g) is a local personal evidence library for documents, files,
-and memories. Ask a normal question and inspect exact quotations with citations.
-Open the original source, copy cited context, or save an investigation as a
-collection. A compact MCP interface gives your existing AI assistant the same
-path from a question to its sources.
+The release is `0.1.0a1`, tagged `v0.1.0a1`. It includes the local library, bundled
+interface, terminal and MCP workflow. The inherited agent/audio runtime remains
+available for advanced use but is not the default alpha experience.
 
-The interface keeps the full library available: graph and list exploration,
-imports, document history, original PDF pages and regions, collections, review,
-health information, themes and motion preferences. Quotes are source text;
-retrieval matches and recorded connections are not verified answers.
+## Source boundary
 
-## Try the isolated demo
+`scripts/export_public_candidate.py` selects runtime Python under
+`hunter_gatherer`, reviewed tests/docs, fictional fixtures and packaged frontend
+assets. `PUBLIC_CANDIDATE_MANIFEST.json` records selected file hashes and sizes.
+The exporter excludes local configuration, credentials, agent state, personal
+databases, private corpora and development evaluation modules.
 
-Use Python 3.11 or newer and a **dedicated virtual environment** from this directory:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install '.[dev,document-view]'
-.venv/bin/hunt demo create ./demo-library
-.venv/bin/hunt ask "Is the Lantern pilot real?" --demo-library ./demo-library --json
-.venv/bin/hunt demo serve ./demo-library --port 8767
-```
-
-Open http://127.0.0.1:8767/. On Windows, virtual-environment executables live in
-`.venv/Scripts` instead of `.venv/bin`. See the [Windows setup instructions](getting-started.md#windows-powershell)
-and [current platform checks](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml).
-The demo target must be new or empty. It uses only fictional Lantern project
-sources, a separate SQLite database and deterministic hashing embeddings. It
-ignores normal configuration and downloads no model weights. Installing Python
-packages may need network access. Hashing demonstrates the workflow; it is not
-a semantic retrieval quality benchmark.
-
-Try: **What is the Lantern pilot's weekly review schedule?**
-
-Graph is the home workspace. Choose **Ask** in its search bar and enter one clear
-question with its subject. Quotes open alongside the graph; closing them returns
-to the same graph position. **Records** searches library entries, and **Commands**
-finds actions. Additional questions are optional; they look for different details,
-rather than imposing filters every source must match.
-
-Open a source title to read the original. Expand a quote to see the surrounding
-passage. Copy quotations with their citations for your assistant, or select
-sources to save a collection with notes, review decisions and unresolved questions.
-
-### About search results
-
-- **Are these generated answers?** No. Quotes are exact excerpts from your files;
-  saved memories are records in your library. A highlighted sentence matches your
-  question's wording, but the highlight does not verify its claim. Read the full
-  passage for context, qualifications and dates.
-- **What gets copied?** The copy action uses the loaded source passages and saved
-  memories, with their citations. When you choose to copy a selection, it uses only
-  selected sources from those results. File titles, connection hints and generated
-  annotations are not quotations and are not included as source text. Sources are
-  checked again for current access; any withheld or omitted text is reported.
-- **Do I need a collection?** No. Collections save references and your own review
-  notes for later. A writing example is a source you want an assistant to use as
-  a reference for tone or style; it is separate from evidence for a factual claim.
-- **Why are there related files or records?** A title, saved connection or derived
-  annotation can help you find a source even when no matching quotation was
-  returned. Open it to inspect the actual content. A connection is not independent
-  corroboration.
-- **Does an empty result mean the information is absent?** No. Each search has a
-  delivery limit. Load more results when offered, try another question, or inspect
-  the library directly. Missing text can also reflect extraction or access limits.
-  Result details retain the search diagnostics for investigating these cases.
-
-This is developed separately from ProHarness. Internal Python modules, older
-commands and MCP names retain `proharness` for compatibility; `hunt` is the h/g
-entry point. Do not install both projects in
-the same virtual environment. The explicit demo launcher above keeps data and
-configuration isolated; ordinary `proharness serve` reads normal ProHarness
-configuration and is not the separate demo launcher.
-
-## Connect your assistant
-
-Connect an MCP client to http://127.0.0.1:8767/mcp. The six tool families are
-**Find, Open, Memory, Collection, Import and Status**. Find returns bounded source
-candidates; Open inspects the exact identified source. Follow continuation when
-more admitted matches are available. A miss is not proof of absence, and a link
-is not independent corroboration. Your assistant should cite inspected sources
-and keep unsupported details explicit.
-
-The `document-view` extra enables original PDF page images and bounded region
-inspection through Open. It renders locally without OCR or model downloads.
-Without it, text retrieval works and page-image requests return a capability
-error. See the [image region workflow](visual-regions.md) for authored descriptions,
-exact bounds and supported Open routes. Optional OCR recovery, cloud clients and
-voice require additional setup and are outside this demo's validation scope.
-
-## Verify and recover
-
-```bash
-.venv/bin/python -m pytest tests
-.venv/bin/python scripts/smoke_packaged_demo.py
-.venv/bin/hunt backup create ./demo-backup --database ./demo-library/demo.db
-.venv/bin/hunt backup verify ./demo-backup
-.venv/bin/hunt backup restore ./demo-backup --database ./restored-demo.db
-```
-
-Backup and restore require explicit paths; restore refuses an occupied target.
-The selected synthetic tests cover the six-tool workflow, continuation, API and
-privacy behavior, exact sources, original PDF pages, isolated configuration,
-persistence, backup/recovery and export boundaries. They are a bounded subset of
-development tests. Private evaluation corpora and evaluation modules are excluded;
-benchmark commands requiring those modules are outside this candidate's scope.
-
-The [packaged-demo matrix](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)
-tests Windows, macOS and Linux with Python 3.11–3.14. Inspect the exact commit's
-results before relying on a release. The base install excludes neural embedding
-packages, Qdrant and cloud SDKs; those capabilities have optional extras. Validate
-a clean base environment as well as the extras included in a release. There is
-no Python lockfile; record resolved versions for reproducible release checks.
+The public repository starts from reviewed source, not the original project's
+private Git history. Future releases can use this repository's reviewed history;
+do not import private development history as part of a release update. The
+[provenance record](release-provenance-20261014.md) describes attribution and
+fixture origins. Pattern scanning is a limited check, not comprehensive privacy
+or rights clearance.
 
 ## Rebuild the interface
 
+From `frontend/`:
+
 ```bash
-cd frontend
 npm ci
-npm run build
 npm test
+npm run build
 ```
 
-The exporter selects HTML-referenced assets and explicit font/license files.
-Verify installed assets after rebuilding. Keep third-party notices with them.
+Commit the rebuilt packaged interface with its source changes. Verify installed
+assets after rebuilding; fonts and icon notices must accompany them. Users do
+not need Node to run the resulting package.
 
-## Prepare a clean source candidate
+## Export and build
+
+Run from the repository root. Use new destinations outside the checkout:
 
 ```bash
-python scripts/export_public_candidate.py --destination ../fresh-public-candidate
-python scripts/check_publication_hygiene.py ../fresh-public-candidate
+python3 scripts/export_public_candidate.py --destination ../public-candidate
+python3 scripts/check_publication_hygiene.py ../public-candidate
+python3 -m venv ../hg-build-env
+../hg-build-env/bin/python -m pip install build
+../hg-build-env/bin/python -m build ../public-candidate --outdir ../hg-release-dist
 ```
 
-The destination must be new or empty and outside the development repository.
-The manifest records selected file hashes and sizes. The exporter preserves the
-repository README and includes this verification guide separately. It excludes Git history, configuration,
-credentials, agent state, databases, private corpus files and unreviewed tests/docs.
-Use a fresh Git repository from that export; do not publish development history.
-The [provenance record](release-provenance-20261014.md) describes the review boundary.
-Pattern scanning is a bounded check, not comprehensive rights or privacy clearance.
+The build produces an sdist and wheel. Scan both artifacts as well as the clean
+export. Run hygiene checks before tests create bytecode/caches in the candidate.
+On Windows, use `Scripts\python.exe` for virtual-environment executables.
+
+## Test the installed artifact
+
+Install the exact wheel into a fresh environment and run from outside the source
+checkout. Example, continuing from the previous commands:
+
+```bash
+python3 -m venv ../hg-check-env
+../hg-check-env/bin/python -m pip install '../hg-release-dist/hunter_gatherer-0.1.0a1-py3-none-any.whl[dev,document-view]'
+cd ..
+hg-check-env/bin/python -m pytest -q public-candidate/tests
+hg-check-env/bin/python -I -B public-candidate/scripts/smoke_packaged_demo.py --require-lean --output packaged-demo.json
+hg-check-env/bin/python -I -B public-candidate/scripts/smoke_personal_library.py --output personal-library.json
+hg-check-env/bin/python -m pip freeze > resolved-dependencies.txt
+```
+
+The synthetic tests exercise source/access rules, citations, document history,
+collections, continuation, configuration isolation, original images, backup and
+restore. The demo smoke checks the installed fictional workflow. The personal
+library smoke starts from an empty directory, imports files and exercises the
+installed CLI/API/MCP and recovery path. Keep their reports with the artifact.
+
+Also install the wheel without test/image extras in a fresh base environment.
+Confirm that `hunt setup`, personal library creation, import and text search work
+without Torch, sentence-transformers, Qdrant or cloud SDKs. Optional semantic
+experiments should use a separate environment and explicitly configured cached
+weights; do not make routine CI download models implicitly.
+
+The [CI workflow](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)
+checks frontend source/assets plus packaged installs on Linux, macOS and Windows
+with Python 3.11–3.14. Require the exact release commit's checks to pass or state
+unverified cases explicitly. Resolved dependency reports describe tested
+environments; they are not a universal cross-platform lockfile.
+
+## Search and interface walkthrough
+
+Evaluate documents beyond Lantern. Include paraphrases, negation, conflicting
+versions, plans versus completed outcomes and questions with no supported answer.
+Judge retrieval and excerpt selection separately. Preserve exact quotations and
+qualifications; a matching title or selected sentence is not claim verification.
+Record the corpus, backend/model, settings and measured results instead of
+extrapolating from a few examples.
+
+Manually check the installed browser workflow: create/import, Ask, context/source
+opening, copying citations, saving a collection, restarting and restoring a
+backup. Check keyboard focus, light/dark themes, reduced motion and narrow screens.
+Automation cannot establish that every visual interaction is usable.
+
+## Compatibility checks
+
+- New tools/resources use `hg_*` and `hg://`; clients must update old tool names.
+- Existing bracket citations retain their IDs and source versions.
+- Readers accept older collection markers and compact formats without changing
+  source text, hashes, reference identities or recorded followups.
+- `HG_` settings and h/g's config directory remain separate from ProHarness.
+- The real-library launcher uses its explicit manifest, not ambient provider
+  credentials or another installation's database.
+- Backup/restore uses a new destination and preserves the selected model identity.
+
+Do not migrate or switch an existing personal installation as part of package
+verification. Use synthetic data or an explicitly authorized separate copy.
+
+## Publish the alpha
+
+Prepare the exact wheel/sdist, checksum list, source manifest, dependency reports
+and verification results. Release notes should identify the source commit,
+supported workflow, installation instructions, known limits and relevant changes.
+Include an actual interface screenshot. Ensure the repository's private security
+reporting channel matches [SECURITY.md](../SECURITY.md).
+
+Publish a tagged **prerelease** on GitHub only after verifying those artifacts.
+GitHub is the alpha distribution channel; do not advertise a PyPI package or
+Homebrew formula until those distributions exist. Verify the public repository,
+release downloads, documentation links and fresh installation after publishing.
 
 ## License
 
-Project source is licensed under **Apache License 2.0**, selected for hunter/gatherer
-on 2026-10-20. See [LICENSE](../LICENSE) and [NOTICE](../NOTICE). Bundled fonts and
-icons retain their upstream terms. The original ProHarness project and live
-personal library are separate and unchanged by this release.
+Project source is licensed under [Apache License 2.0](../LICENSE).
+[NOTICE](../NOTICE) retains original ProHarness and bundled third-party
+attribution. Dependency and asset licenses retain their own terms. The original
+ProHarness installation and live personal library are separate from this release.

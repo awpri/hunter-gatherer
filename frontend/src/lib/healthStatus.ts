@@ -16,11 +16,11 @@ export function healthLabel(summary: HealthSummary | null): string {
 }
 export function readHealthSummary(storeId: string): HealthSummary | null {
   try {
-    const value = JSON.parse(localStorage.getItem(`proharness.health.summary.v1.${storeId}`) || 'null');
+    const value = JSON.parse(localStorage.getItem(`hunter_gatherer.health.summary.v1.${storeId}`) || 'null');
     return value && ['green', 'amber', 'red'].includes(value.tone) && value.scope === 'public' && Number.isFinite(value.scannedAt) && Number.isFinite(value.issues) && value.issues >= 0 ? value : null;
   } catch {return null;}
 }
 export function saveHealthSummary(storeId: string, summary: HealthSummary) {
   if (summary.scope !== 'public') return;
-  try {localStorage.setItem(`proharness.health.summary.v1.${storeId}`, JSON.stringify(summary));} catch { /* Indicator still works for this session. */ }
+  try {localStorage.setItem(`hunter_gatherer.health.summary.v1.${storeId}`, JSON.stringify(summary));} catch { /* Indicator still works for this session. */ }
 }

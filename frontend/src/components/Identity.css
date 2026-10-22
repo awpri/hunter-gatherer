@@ -2,18 +2,18 @@
 @font-face{font-family:'Geist Mono';src:url('/fonts/GeistMono-Variable.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
 :root{font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--font-sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--font-mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
 code,kbd,pre,.mono,.connection-code{font-family:var(--font-mono)}
-.proharness-mark{overflow:visible;animation:mark-arrive 550ms cubic-bezier(.2,.8,.2,1) both;transition:transform 220ms ease}
-.proharness-mark-frame{fill:var(--accent-soft);stroke:var(--accent);stroke-opacity:.28}
-.proharness-mark-fold{fill:var(--accent)}
-.proharness-mark-cut{fill:var(--rail)}
-.proharness-mark-seam{stroke:var(--rail);stroke-width:1.15;stroke-opacity:.55}
-.brand-mark:hover .proharness-mark{transform:translateY(-1px) rotate(-3deg)}
-.brand-mark:active .proharness-mark{transform:scale(.96)}
+.hunter-gatherer-mark{overflow:visible;animation:mark-arrive 550ms cubic-bezier(.2,.8,.2,1) both;transition:transform 220ms ease}
+.hunter-gatherer-mark-frame{fill:var(--accent-soft);stroke:var(--accent);stroke-opacity:.28}
+.hunter-gatherer-mark-fold{fill:var(--accent)}
+.hunter-gatherer-mark-cut{fill:var(--rail)}
+.hunter-gatherer-mark-seam{stroke:var(--rail);stroke-width:1.15;stroke-opacity:.55}
+.brand-mark:hover .hunter-gatherer-mark{transform:translateY(-1px) rotate(-3deg)}
+.brand-mark:active .hunter-gatherer-mark{transform:scale(.96)}
 @keyframes mark-arrive{from{opacity:0;transform:translateY(4px) scale(.92)}to{opacity:1;transform:none}}
 .library-icon{display:inline-block;vertical-align:middle;flex-shrink:0}
-@media(prefers-reduced-motion:reduce){.proharness-mark{animation:none;transition:none}.brand-mark:hover .proharness-mark{transform:none}}
-[data-motion='reduced'] .proharness-mark{animation:none;transition:none}
-[data-motion='reduced'] .brand-mark:hover .proharness-mark{transform:none}
+@media(prefers-reduced-motion:reduce){.hunter-gatherer-mark{animation:none;transition:none}.brand-mark:hover .hunter-gatherer-mark{transform:none}}
+[data-motion='reduced'] .hunter-gatherer-mark{animation:none;transition:none}
+[data-motion='reduced'] .brand-mark:hover .hunter-gatherer-mark{transform:none}
 
 /* Crisp, compact product identity; the arrow follows the chosen accent. */
 .library-brand .brand-mark{color:var(--ink);border-radius:4px}

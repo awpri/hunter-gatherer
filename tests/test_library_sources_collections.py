@@ -5,9 +5,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.schemas import Memory
-from proharness.server.routers import library
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.server.routers import library
 
 
 @pytest.fixture
@@ -124,8 +124,8 @@ def test_collection_survives_store_restart_and_read_does_not_initialize(client, 
     assert store._sqlite.total_changes == before
     _, identity, hit = ingest(store, tmp_path)
     result = create(client, [{"document_id": identity, "chunk_id": hit["chunk_id"]}]).json()
-    from proharness.memory.library_collections import get_collection, list_collections
-    from proharness.memory.store import MemoryStore
+    from hunter_gatherer.memory.library_collections import get_collection, list_collections
+    from hunter_gatherer.memory.store import MemoryStore
     other = MemoryStore(settings, embedder=embedder)
     try:
         assert get_collection(other, result["id"])["revision"] == 1
@@ -282,7 +282,7 @@ def test_collection_notes_reviews_exact_dependencies_revisions_and_privacy(clien
 
 def test_collection_publication_rechecks_latest_under_writer_transaction(client, store, tmp_path, monkeypatch):
     source, identity, hit = ingest(store, tmp_path)
-    from proharness.memory import library_collections
+    from hunter_gatherer.memory import library_collections
     previous = library_collections._CollectionCoordinationStore.execute
 
     def supersede_then_publish(self, action, **kwargs):

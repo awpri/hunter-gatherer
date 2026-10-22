@@ -8,9 +8,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.schemas import Memory
-from proharness.server.routers import library
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.server.routers import library
 
 
 @pytest.fixture
@@ -236,7 +236,7 @@ def test_graph_bounds_determinism_filters_and_read_only(client, store):
 
 
 def test_archive_constructor_preserves_read_snapshot_and_checks_missing_index(store):
-    from proharness.memory.library_health import _read_snapshot
+    from hunter_gatherer.memory.library_health import _read_snapshot
 
     DocumentArchive(store)
     with _read_snapshot(store):

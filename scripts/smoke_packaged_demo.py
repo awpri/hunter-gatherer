@@ -90,15 +90,15 @@ async def check_original_region(client, root, citation=None):
         original = data.getvalue()
         path = root / "fictional-color-blocks.pdf"
         path.write_bytes(original)
-        planned = tool_payload(await client.call_tool("proharness_import_documents", {
+        planned = tool_payload(await client.call_tool("hg_import_documents", {
             "action": "create", "paths": [str(path)], "idempotency_key": "fictional-pdf",
         }))
-        imported = tool_payload(await client.call_tool("proharness_import_documents", {
+        imported = tool_payload(await client.call_tool("hg_import_documents", {
             "action": "run", "job_id": planned["job_id"],
         }))
         assert imported["complete"] and imported["counts"]["succeeded"] == 1, imported
         document_id = imported["items"][0]["document_id"]
-        attached = await client.call_tool("proharness_import_documents", {
+        attached = await client.call_tool("hg_import_documents", {
             "action": "enrich", "idempotency_key": "fictional-region",
             "enrichment": {"document_id": document_id, "expected_version": 1,
                 "expected_content_hash": hashlib.sha256(original).hexdigest(),
@@ -107,7 +107,7 @@ async def check_original_region(client, root, citation=None):
                      "anchors": [], "region": {"page": 1, "bbox": [0, 0, 0.5, 0.5]}}]},
         })
         assert not attached.is_error, attached.content
-        found = tool_payload(await client.call_tool("proharness_find", {
+        found = tool_payload(await client.call_tool("hg_find", {
             "query": "crimson cobalt inspection blocks", "max_tokens": 4096,
         }))
         item = found["visual_regions"][0]
@@ -116,7 +116,7 @@ async def check_original_region(client, root, citation=None):
     images = {}
     hashes = {}
     for view in ("page", "region"):
-        result = await client.call_tool("proharness_open", {"refs": [citation], "view": view})
+        result = await client.call_tool("hg_open", {"refs": [citation], "view": view})
         assert not result.is_error, result.content
         metadata = result.structured_content
         assert metadata["citation"] == citation and metadata["verification"] == "unverified"
@@ -145,9 +145,9 @@ def main():
         help="Development check only; allow editable/source import",
     )
     args = parser.parse_args()
-    import proharness
+    import hunter_gatherer
 
-    imported = Path(proharness.__file__).resolve()
+    imported = Path(hunter_gatherer.__file__).resolve()
     package_root = Path(sysconfig.get_path("purelib")).resolve()
     assert args.allow_source or imported.is_relative_to(package_root), (
         f"Source checkout imported: {imported}"
@@ -165,12 +165,12 @@ def main():
         unwanted = installed & {"torch", "sentence-transformers", "transformers", "qdrant-client", "openai", "anthropic", "docling", "faster-whisper"}
         assert not unwanted, f"Unexpected heavyweight dependencies: {sorted(unwanted)}"
         record["lean_install_verified"] = True
-    with tempfile.TemporaryDirectory(prefix="proharness-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="hunter_gatherer-smoke-") as temporary:
         root = Path(temporary).resolve()
         target = root / "fictional-demo"
         sentinel = root / "never-create-real.db"
         # Keep Windows process/DLL and temporary-directory essentials, stripping providers,
-        # PYTHONPATH, .env settings and all ambient ProHarness configuration.
+        # PYTHONPATH, .env settings and all ambient hunter/gatherer configuration.
         allowed = {
             "PATH",
             "HOME",
@@ -187,13 +187,13 @@ def main():
         }
         env = {k: v for k, v in os.environ.items() if k.upper() in allowed}
         env.update(
-            PROHARNESS_SQLITE_PATH=str(sentinel),
-            PROHARNESS_EMBED_MODEL="must-not-load",
+            HG_SQLITE_PATH=str(sentinel),
+            HG_EMBED_MODEL="must-not-load",
             PYTHONNOUSERSITE="1",
             HF_HUB_OFFLINE="1",
             TRANSFORMERS_OFFLINE="1",
         )
-        command = [sys.executable, "-I", "-B", "-m", "proharness.cli"]
+        command = [sys.executable, "-I", "-B", "-m", "hunter_gatherer.cli"]
         created = subprocess.run(
             command + ["demo", "create", str(target)],
             cwd=root,
@@ -237,32 +237,32 @@ def main():
                         await client.initialize()
                         names = {tool.name for tool in (await client.list_tools()).tools}
                         assert names == {
-                            "proharness_status", "proharness_find", "proharness_open",
-                            "proharness_collection", "proharness_memory", "proharness_import_documents",
+                            "hg_status", "hg_find", "hg_open",
+                            "hg_collection", "hg_memory", "hg_import_documents",
                         }, names
                         if number == 1:
-                            remembered = await client.call_tool("proharness_memory", {
+                            remembered = await client.call_tool("hg_memory", {
                                 "action": "remember", "text": "The fictional Lantern demo uses a local evidence library.",
                                 "source": "fictional release smoke",
                             })
                             assert not remembered.is_error, remembered.content
                             imported_path = root / "fictional-smoke-import.md"
                             imported_path.write_text("# Fictional smoke source\nThe demo inspection marker is amber-lantern.\n")
-                            planned = tool_payload(await client.call_tool("proharness_import_documents", {
+                            planned = tool_payload(await client.call_tool("hg_import_documents", {
                                 "action": "create", "paths": [str(imported_path)],
                                 "idempotency_key": "fictional-smoke-import",
                             }))
-                            imported = tool_payload(await client.call_tool("proharness_import_documents", {
+                            imported = tool_payload(await client.call_tool("hg_import_documents", {
                                 "action": "run", "job_id": planned["job_id"],
                             }))
                             assert imported["complete"] and imported["counts"]["succeeded"] == 1, imported
                         status = (
-                            await client.call_tool("proharness_status", {})
+                            await client.call_tool("hg_status", {})
                         ).structured_content
                         assert Path(status["store"]["database"]).resolve() == target / "demo.db"
                         found = (
                             await client.call_tool(
-                                "proharness_find", {"query": "Lantern pilot weekly review schedule"}
+                                "hg_find", {"query": "Lantern pilot weekly review schedule"}
                             )
                         ).structured_content
                         passage = next(
@@ -270,7 +270,7 @@ def main():
                         )
                         opened = (
                             await client.call_tool(
-                                "proharness_open", {"refs": [passage["citation"]]}
+                                "hg_open", {"refs": [passage["citation"]]}
                             )
                         ).structured_content
                         assert opened["statuses"] == ["available"]
@@ -278,7 +278,7 @@ def main():
                         if number == 1:
                             saved = (
                                 await client.call_tool(
-                                    "proharness_collection",
+                                    "hg_collection",
                                     {
                                         "action": "save",
                                         "collection": {
@@ -298,7 +298,7 @@ def main():
                         else:
                             exported = (
                                 await client.call_tool(
-                                    "proharness_collection",
+                                    "hg_collection",
                                     {"action": "export", "collection_id": collection_id},
                                 )
                             ).structured_content
@@ -317,7 +317,7 @@ def main():
             if number == 3:
                 # Exercise the installed recovery code after both earlier servers
                 # have stopped; make the original store unavailable before Open.
-                from proharness.backup import create_backup, restore_backup, verify_backup
+                from hunter_gatherer.backup import create_backup, restore_backup, verify_backup
 
                 original = target
                 bundle = root / "verified-backup"

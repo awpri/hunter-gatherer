@@ -3,8 +3,8 @@ from copy import deepcopy
 
 import pytest
 
-from proharness.memory.evidence_bounded import bounded_evidence_packet
-from proharness.memory.output_budget import output_bytes
+from hunter_gatherer.memory.evidence_bounded import bounded_evidence_packet
+from hunter_gatherer.memory.output_budget import output_bytes
 
 
 def packet():
@@ -55,7 +55,7 @@ def test_labels_do_not_displace_core_or_change_continuation(tokens, monkeypatch)
     source = packet()
     framing = {"continuation": {"next_cursor": "exact-opaque-cursor", "has_more": True}}
     labeled = project(source, tokens, envelope=framing)
-    monkeypatch.setattr("proharness.memory.evidence_bounded._reference_labels", lambda *_: {})
+    monkeypatch.setattr("hunter_gatherer.memory.evidence_bounded._reference_labels", lambda *_: {})
     unlabeled = project(source, tokens, envelope=framing)
     stripped = deepcopy(labeled)
     for ref in stripped["omitted_references"]:
@@ -93,7 +93,7 @@ def test_near_cap_labels_take_priority_over_accounted_optional_metadata(monkeypa
     source["missing_information"] = [{"field": "name", "question": "Unknown name"}]
     framing = {"continuation": {"next_cursor": "exact-cursor", "has_more": True}}
     labeled = project(source, 2048, envelope=framing)
-    monkeypatch.setattr("proharness.memory.evidence_bounded._reference_labels", lambda *_: {})
+    monkeypatch.setattr("hunter_gatherer.memory.evidence_bounded._reference_labels", lambda *_: {})
     unlabeled = project(source, 2048, envelope=framing)
     retained = next(item for item in unlabeled["relevant_memories"]
                     if item["citation"] == "[mem:retained]")
@@ -132,7 +132,7 @@ def test_labels_precede_repeated_diagnostics_without_losing_gap_or_requirement_r
         "retrieval_assessment": {"candidate_citations": ["[doc:e#f]"],
                                  "missing_query_literals": ["name"]}}]
     labeled = project(source, 2048)
-    monkeypatch.setattr("proharness.memory.evidence_bounded._reference_labels", lambda *_: {})
+    monkeypatch.setattr("hunter_gatherer.memory.evidence_bounded._reference_labels", lambda *_: {})
     baseline = project(source, 2048)
     assert all(ref.get("navigation_labels") for ref in labeled["omitted_references"])
     assert labeled["supporting_passages"] == baseline["supporting_passages"]

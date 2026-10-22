@@ -8,10 +8,10 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from proharness.mcp.server import build_server
-from proharness.memory import document_navigation
-from proharness.memory.documents import DocumentArchive
-from proharness.server.routers import library
+from hunter_gatherer.mcp.server import build_server
+from hunter_gatherer.memory import document_navigation
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.server.routers import library
 
 
 def test_navigation_context_transport_history_and_visibility(store, tmp_path):
@@ -26,15 +26,15 @@ def test_navigation_context_transport_history_and_visibility(store, tmp_path):
                             document_date="2032-02-07", category="correction")
     harness = SimpleNamespace(store=store, settings=store.settings,
                               loop=SimpleNamespace(embedder=store.embedder))
-    server, _ = build_server(harness=harness)
+    server, _ = build_server(harness=harness, tool_profile="full")
     app = FastAPI()
     app.state.library_harness = harness
     app.include_router(library.router, prefix="/api/library")
 
     for tool, arguments, route in (
-        ("proharness_document_outline", {"document_id": original["document_id"]},
+        ("hg_document_outline", {"document_id": original["document_id"]},
          f"/api/library/documents/{original['document_id']}/outline"),
-        ("proharness_document_window", {"chunk_id": hit["chunk_id"]},
+        ("hg_document_window", {"chunk_id": hit["chunk_id"]},
          f"/api/library/chunks/{hit['chunk_id']}/window"),
     ):
         async def call(name=tool, args=arguments):

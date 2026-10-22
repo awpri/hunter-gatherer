@@ -10,10 +10,10 @@ import zlib
 
 import pytest
 
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.document_originals import load_document_original
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.document_originals import load_document_original
 
-backend = importlib.import_module("proharness.memory.document_page_image")
+backend = importlib.import_module("hunter_gatherer.memory.document_page_image")
 
 
 def pdf_bytes(*, pages=2, encrypted=False, width=240, height=320):
@@ -71,7 +71,7 @@ def test_exact_historical_original_newest_privacy_deletion_before_io(store, tmp_
     old_bytes = source.read_bytes()
     source.write_bytes(pdf_bytes(pages=1))
     new = DocumentArchive(store).ingest(str(source), sensitive=True)["document_id"]
-    import proharness.memory.document_originals as originals
+    import hunter_gatherer.memory.document_originals as originals
     called = []
     actual = originals._read_managed
     monkeypatch.setattr(originals, "_read_managed", lambda path: called.append(path) or actual(path))
@@ -228,7 +228,7 @@ def real_interpreter(monkeypatch):
     interpreter = os.environ.get("PAGE_IMAGE_TEST_PYTHON")
     if not interpreter:
         pytest.skip("Set PAGE_IMAGE_TEST_PYTHON to a trusted interpreter with document-view installed")
-    monkeypatch.setenv("PROHARNESS_PAGE_IMAGE_PYTHON", interpreter)
+    monkeypatch.setenv("HG_PAGE_IMAGE_PYTHON", interpreter)
 
 
 def test_real_two_page_renderer_and_page_range(store, tmp_path, monkeypatch):
@@ -294,7 +294,7 @@ def test_worker_cancellation_cleans_owned_group_and_temporary_files(monkeypatch)
 
 
 def test_interpreter_requires_absolute_path(monkeypatch):
-    monkeypatch.setenv("PROHARNESS_PAGE_IMAGE_PYTHON", "python")
+    monkeypatch.setenv("HG_PAGE_IMAGE_PYTHON", "python")
     assert_safe_error(backend._worker_render(b"%PDF", 1, 512), "renderer_unavailable")
 
 
@@ -388,9 +388,9 @@ def test_legacy_privacy_closure_denied_before_io_and_opt_in(store, tmp_path, mon
     a, private = legacy_related_documents(store, tmp_path, transitive=transitive)
     store._sqlite.execute("UPDATE archive_documents SET sensitive=1,deleted_at=? WHERE id=?", (42 if tombstone else None, private))
     store._sqlite.commit()
-    from proharness.memory.attribution import _sensitive_documents
+    from hunter_gatherer.memory.attribution import _sensitive_documents
     assert _sensitive_documents(store, (a,))
-    import proharness.memory.document_originals as originals
+    import hunter_gatherer.memory.document_originals as originals
     actual_read = originals._read_managed
     monkeypatch.setattr(originals, "_read_managed", lambda path: pytest.fail("Private closure reached file I/O"))
     monkeypatch.setattr(backend, "_worker_render", lambda *args: pytest.fail("Private closure reached renderer"))

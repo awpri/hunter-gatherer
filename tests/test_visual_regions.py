@@ -6,16 +6,16 @@ import pytest
 from PIL import Image
 from test_document_page_image import pdf_bytes
 
-from proharness.memory.document_enrichment import (
+from hunter_gatherer.memory.document_enrichment import (
     EnrichmentError,
     attach_document_enrichment,
     revoke_document_enrichment,
 )
-from proharness.memory.documents import DocumentArchive
-from proharness.memory.output_budget import output_bytes
-from proharness.memory.simple_open import open_sources
-from proharness.memory.simple_search import find
-from proharness.memory.visual_regions import discover_regions, region_image, resolve_region
+from hunter_gatherer.memory.documents import DocumentArchive
+from hunter_gatherer.memory.output_budget import output_bytes
+from hunter_gatherer.memory.simple_open import open_sources
+from hunter_gatherer.memory.simple_search import find
+from hunter_gatherer.memory.visual_regions import discover_regions, region_image, resolve_region
 
 
 def setup(store, tmp_path, bbox=None):
@@ -122,28 +122,28 @@ def test_six_tool_transport_import_find_and_open(store,tmp_path):
 
     from test_simple_library_workflow import server_for
 
-    from proharness.mcp.profiles import LIBRARY_TOOL_NAMES
+    from hunter_gatherer.mcp.profiles import LIBRARY_TOOL_NAMES
     pytest.importorskip('pypdfium2')
     path=tmp_path/'transport.pdf'
     path.write_bytes(pdf_bytes(pages=1))
     doc=DocumentArchive(store).ingest(str(path))
     server=server_for(store)
     assert len(asyncio.run(server.list_tools())) == len(LIBRARY_TOOL_NAMES) == 6
-    attached=asyncio.run(server.call_tool('proharness_import_documents', {'action':'enrich', 'idempotency_key':'wire',
+    attached=asyncio.run(server.call_tool('hg_import_documents', {'action':'enrich', 'idempotency_key':'wire',
         'enrichment':{'document_id':doc['document_id'],'expected_version':doc['version'],
         'expected_content_hash':doc['content_hash'],'producer':{'id':'wire'},'records':[
             {'key':'wire','kind':'visual_region','text':'orbital crimson rocket schematic','anchors':[],
              'region':{'page':1,'bbox':[0,0,.5,.5]}}]}}))
     assert not attached.is_error, attached.content
-    found=asyncio.run(server.call_tool('proharness_find',{'query':'orbital rocket','max_tokens':4096}))
+    found=asyncio.run(server.call_tool('hg_find',{'query':'orbital rocket','max_tokens':4096}))
     assert not found.is_error, found.content
     item=json.loads(found.content[0].text)['visual_regions'][0]
-    opened=asyncio.run(server.call_tool('proharness_open',item['followup']['arguments']))
+    opened=asyncio.run(server.call_tool('hg_open',item['followup']['arguments']))
     assert not opened.is_error, opened.content
     assert any(part.type=='image' for part in opened.content)
     metadata=json.loads(next(part.text for part in opened.content if part.type=='text'))
     assert metadata['citation']==item['citation'] and '_image_png' not in metadata
-    from proharness.server.routers.library_sources import CollectionInput
+    from hunter_gatherer.server.routers.library_sources import CollectionInput
     with pytest.raises(ValueError):
         CollectionInput(name='Unsupported region',references=[{'region_id':item['record_id']}])
 
@@ -178,7 +178,7 @@ def test_more_than_eight_regions_continue_without_duplicates_at_short_budget(sto
 
 
 def test_region_open_metadata_budget_excludes_native_image_and_marks_omitted_description(monkeypatch):
-    from proharness.memory import visual_regions
+    from hunter_gatherer.memory import visual_regions
     png=b'large-native-image' * 1000
     monkeypatch.setattr(visual_regions,'region_image',lambda *args,**kwargs: {
         'citation':'[region:11111111-1111-4111-8111-111111111111]',

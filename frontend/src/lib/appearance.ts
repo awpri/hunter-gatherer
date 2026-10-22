@@ -9,7 +9,7 @@ export type Appearance = {
   lightSurface: 'paper' | 'snow' | 'sand';
   backdrop: 'dots' | 'grid' | 'none';
 };
-export const APPEARANCE_KEY = 'proharness.appearance.v1';
+export const APPEARANCE_KEY = 'hunter_gatherer.appearance.v1';
 export const DEFAULT_APPEARANCE: Appearance = { theme: 'dark', accent: 'mint', density: 'comfortable', motion: 'system', surface: 'graphite', lightSurface: 'paper', backdrop: 'dots' };
 export const DARK_SURFACES = [
   {id:'carbon', label:'Carbon'}, {id:'black', label:'Black'}, {id:'graphite', label:'Charcoal'},
