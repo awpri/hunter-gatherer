@@ -55,12 +55,16 @@ def stop_server(process, port):
                 process.wait(timeout=5)
     assert process.poll() is not None, "Owned server process did not exit"
     deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
+    while (remaining := deadline - time.monotonic()) > 0:
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            with socket.create_connection(("127.0.0.1", port), timeout=min(3.0, remaining)):
                 pass
         except ConnectionRefusedError:
             return tree_exit_code
+        except TimeoutError:
+            # Windows can take longer than 500 ms to reject a closed loopback
+            # port. A timeout is not proof of closure; retry within the deadline.
+            pass
         time.sleep(0.1)
     raise RuntimeError("Owned server listener remained open after cleanup")
 

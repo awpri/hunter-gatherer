@@ -61,9 +61,9 @@ jobs:
           cp scripts/smoke_personal_library.py "$RUNNER_TEMP/smoke_personal_library.py"
           cd "$RUNNER_TEMP"
           export PAGE_IMAGE_TEST_PYTHON="$smoke_python"
-          "$smoke_python" -m pytest -q --tb=short -p no:cacheprovider --junitxml="$RUNNER_TEMP/packaged-tests.xml" "$RUNNER_TEMP/public-candidate/tests"
           "$smoke_python" -I -B smoke_packaged_demo.py --require-lean --output packaged-demo.json
           "$smoke_python" -I -B smoke_personal_library.py --output personal-library.json
+          "$smoke_python" -m pytest -q --tb=short -p no:cacheprovider --junitxml="$RUNNER_TEMP/packaged-tests.xml" "$RUNNER_TEMP/public-candidate/tests"
           "$smoke_python" -m pip freeze > resolved-dependencies.txt
       - uses: actions/upload-artifact@v4
         if: always()

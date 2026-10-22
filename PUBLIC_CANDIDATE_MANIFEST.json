@@ -86,7 +86,7 @@
     {
       "path": ".github/workflows/packaged-demo.yml",
       "bytes": 3028,
-      "sha256": "bc9c29ed31c2743689154f3a3c932a8b15c47799ea4d11b53bfccbceea579a72"
+      "sha256": "41d3c523038fbf2c8c66fdf8606a552b969be6e7d09e8903a9e8381a265ba5ed"
     },
     {
       "path": ".gitignore",
@@ -1945,13 +1945,13 @@
     },
     {
       "path": "scripts/smoke_packaged_demo.py",
-      "bytes": 21148,
-      "sha256": "7c61d902e38039c592c785878cbea1fff5c47e9aa3b378be034ec084ce91e25d"
+      "bytes": 21389,
+      "sha256": "1a5b24550ab8b3dd16caa60f9d590649e119fb08e0049cb10b63be227b1fcd80"
     },
     {
       "path": "scripts/smoke_personal_library.py",
-      "bytes": 12923,
-      "sha256": "22c91a7bee63aeea09e8bdcef75803cb19309b216d05a0274ede74f4807b2c7c"
+      "bytes": 13164,
+      "sha256": "52d00efda0f0411dec27db0b41e03c8b3ea3e5adf03b33bb5e7dfae220f46d03"
     },
     {
       "path": "tests/conftest.py",
