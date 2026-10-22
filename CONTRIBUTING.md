@@ -1,8 +1,18 @@
 # Contributing to hunter/gatherer
 
-Focused fixes, useful bug reports and clearer documentation all help. For a
-larger feature or a change to the evidence model, open an issue first so its
-scope and interface can be discussed before implementation.
+hunter/gatherer is a maintainer-led project. Bug reports, suggestions and forks
+are welcome. Pull requests are accepted by invitation only: open an issue to
+describe the problem or proposed change, then wait for an explicit invitation
+from the maintainer before submitting a pull request. This applies to code and
+documentation changes alike.
+
+An invitation is permission to propose a change, not a promise to merge it.
+Unsolicited pull requests may be closed without review. Responses, reviews and
+support are provided as time permits, with no guaranteed turnaround.
+
+You are welcome to develop and share your own fork under the Apache-2.0 license
+without seeking an invitation. The development guidance below is for both forks
+and invited contributions.
 
 ## Set up a development environment
 
@@ -70,8 +80,9 @@ assuming an untested platform or optional subsystem works.
 - Keep writing examples separate from factual support.
 - Prefer optional integrations over making a model provider necessary for browsing the library.
 
-## Send a pull request
+## Submit an invited pull request
 
+Link the issue or discussion where the maintainer invited the pull request.
 Explain the problem, the resulting behavior and how you checked it. Include a
 small fictional reproduction for a bug, and screenshots for visible UI changes
 when useful. Keep unrelated refactors separate.

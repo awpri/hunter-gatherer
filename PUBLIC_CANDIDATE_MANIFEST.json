@@ -76,8 +76,8 @@
     },
     {
       "path": ".github/pull_request_template.md",
-      "bytes": 393,
-      "sha256": "a65a684c726010e7894f8178e9ce04970d521ae67295eefb7675b14862a4c990"
+      "bytes": 643,
+      "sha256": "4bd9876289f17339ce360d15ecf6c30f9d9ff9ac4e00b0a59b39137894575e0d"
     },
     {
       "path": ".github/workflows/packaged-demo.yml",
@@ -91,8 +91,8 @@
     },
     {
       "path": "CONTRIBUTING.md",
-      "bytes": 3172,
-      "sha256": "ff43f1463bf5b939071e6fe6058e011408b1be593e44d6998cecf385de55c763"
+      "bytes": 3802,
+      "sha256": "350832361880559f7b60128a482fe74a6dc4b232bb76faa9ca96d16849e5ecf5"
     },
     {
       "path": "LICENSE",
@@ -106,8 +106,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 6924,
-      "sha256": "3095a62990b43ce7523c214ea5a8b58cd887889aa8982cf5678128718112ce1e"
+      "bytes": 7050,
+      "sha256": "3301a7f317cc293f843caf61036eb966f33f2bd196cb7236b8e61cf606c8e62d"
     },
     {
       "path": "SECURITY.md",

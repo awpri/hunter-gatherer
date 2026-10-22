@@ -114,8 +114,10 @@ private, cloning requires an authorized GitHub account.
 
 ## Contributing
 
-Bug reports, documentation improvements and focused pull requests are welcome.
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), or [open an issue](https://github.com/awpri/hunter-gatherer/issues/new/choose).
+Bug reports, suggestions and forks are welcome. Pull requests are by invitation
+only; [open an issue](https://github.com/awpri/hunter-gatherer/issues/new/choose)
+to discuss a change before submitting one. Reviews and support are provided as
+time permits. See [CONTRIBUTING.md](CONTRIBUTING.md) for the policy and development guide.
 See [SECURITY.md](SECURITY.md) for the security boundaries and reporting setup.
 
 ## License
