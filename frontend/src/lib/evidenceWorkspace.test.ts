@@ -2,8 +2,14 @@
 import pilotReview from '../../../hunter_gatherer/demo_data/pilot-review.md?raw';
 // @ts-expect-error Vite raw source import uses the actual standalone demo fixture.
 import pilotPlan from '../../../hunter_gatherer/demo_data/pilot-plan-v2.md?raw';
+// @ts-expect-error Vite raw source import shares quantity cases with the terminal.
+import quantityCasesJSON from '../../../tests/fixtures/release_retrieval/quantity-cases.json?raw';
+// @ts-expect-error Vite raw source import shares independent negative guards.
+import quantityNegativeCasesJSON from '../../../tests/fixtures/release_retrieval/quantity-negative-cases.json?raw';
 import {findPacket,appendFindPage,findResultsHeading,packetContextReferences,passageExcerpt,passageLocation} from './evidenceWorkspace';
 import {describe,it,expect} from 'vitest';
+const quantityCases=JSON.parse(quantityCasesJSON).cases as {id:string;question:string;quote:string;expected_focus:string|null;required_context:string}[];
+const quantityNegativeCases=JSON.parse(quantityNegativeCasesJSON).cases as {id:string;question:string;quote:string}[];
 import {assessmentLabel,citationReference,retrievalPathReference,collectionBody,normalizeRequirements,referenceCitation,reviewsForReferences,updateCollectionReview,uniqueReferences,type Collection} from './evidenceWorkspace';
 describe('Evidence workspace boundaries',()=>{
  it('bounds independent requirements without inventing coverage',()=>{expect(normalizeRequirements(' Role?\n\nOutcome?\nDate?\nSource?\nIgnored')).toEqual(['Role?','Outcome?','Date?','Source?']);expect(normalizeRequirements('x'.repeat(300))[0]).toHaveLength(240);expect(assessmentLabel({status:'review_required'})).toBe('Candidates require review');expect(assessmentLabel({status:'weak_matches'})).toBe('Weak matches · review required');expect(assessmentLabel({status:'no_candidates'})).toBe('No candidates returned');});
@@ -76,6 +82,24 @@ describe('Exact loaded context references',()=>{
 
 
 describe('Display-only source excerpts',()=>{
+ it('keeps a count beside a separate unit price and date',()=>{
+  const quote='Two tickets are available per visitor. One ticket costs £12. The booking desk opens on 14 May at 09:00.';
+  const result=passageExcerpt(quote,'How many tickets are available per visitor?');
+  expect(result.text.slice(result.focusStart,result.focusEnd)).toBe('Two tickets are available per visitor.');
+  expect(result.text).toBe(quote);
+ });
+ it.each(quantityNegativeCases)('does not treat a price or article as an available count: $id',(testCase)=>{
+  const result=passageExcerpt(testCase.quote,testCase.question);
+  expect(result.focusStart).toBeUndefined();
+  expect(testCase.quote).toContain(result.text);
+ });
+ it.each(quantityCases)('keeps requested quantity distinct from other numbers: $id',(testCase)=>{
+  const result=passageExcerpt(testCase.quote,testCase.question);
+  const focus=result.focusStart===undefined?null:result.text.slice(result.focusStart,result.focusEnd);
+  expect(focus).toBe(testCase.expected_focus);
+  expect(result.text).toContain(testCase.required_context);
+  expect(testCase.quote).toContain(result.text);
+ });
  it('retains a later qualification and does not emphasize an unmeasured target',()=>{
   const quote='Stonebridge battery trial\n\nThe Stonebridge goal was two hundred hours of battery life. Three prototype units were assembled. Technicians checked the casing dimensions. No endurance measurements were collected, so that goal remains untested.';
   const result=passageExcerpt(quote,'Did Stonebridge reach two hundred hours of battery life?');

@@ -143,7 +143,9 @@ def _validate_extraction_options(backend, ocr_engine, ocr_orientation=None, pdf_
 
 
 def _tokens(text: str) -> list[str]:
-    return [t for t in re.findall(r"\w+", text.lower()) if len(t) > 1 and t not in _STOPWORDS]
+    from hunter_gatherer.memory.lexical import token_words
+    return [term for term in token_words(text, stopwords=_STOPWORDS)
+            if len(term) > 1 and term not in _STOPWORDS]
 
 
 def _spans(text: str, size: int = 1800, overlap: int = 220):
@@ -859,7 +861,8 @@ class DocumentArchive:
         top_k = max(1, min(int(top_k), 30))
         if not query or document_ids == []:
             return {"query": query, "hits": [], "total": 0, "warnings": []}
-        terms = set(_tokens(query))
+        from hunter_gatherer.memory.query_focus import question_terms
+        terms = question_terms(query)
         from hunter_gatherer.memory.retrieval_context import capture_query_vector, embedding_query
         semantic_query = embedding_query(query)
         fingerprint, vector, warnings = self._fingerprint(), None, []
@@ -1016,7 +1019,8 @@ class DocumentArchive:
             return {"query": query, "hits": [], "total": 0, "warnings": [],
                     "offset": offset, "next_offset": None, "has_more": False, "pagination_complete": True,
                     **({"retrieval_assessment": assess_retrieval(query, [])} if native else {})}
-        terms = set(_tokens(query))
+        from hunter_gatherer.memory.query_focus import question_terms
+        terms = question_terms(query)
         counts = [Counter(_tokens(row["title"] + " " + row["section"] + " " + row["text"])) for row in rows]
         frequencies = Counter(term for count in counts for term in count)
         average = sum(sum(c.values()) for c in counts) / max(len(counts), 1)

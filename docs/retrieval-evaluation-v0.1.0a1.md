@@ -29,8 +29,11 @@ The [evaluation script](../scripts/evaluate_release_retrieval.py) creates fresh,
 isolated SQLite libraries. It compares the explicit `hashing:384` configuration
 with cached `BAAI/bge-small-en-v1.5` neural embeddings. Neither run uses Qdrant,
 a writing model, reranking, personal settings, or an existing user library.
-Document search uses the exhaustive archive policy. Each question receives one
-Find page with a 4,096-token output budget.
+Document search uses the exhaustive archive policy. The final alpha run uses
+the managed-library relevance policy, `library_find_relevance_policy="coverage"`.
+Each question receives one Find page with a 4,096-token output budget. The report
+records this policy explicitly; the initial run used the legacy relevance
+policy.
 
 Document rank is the order of distinct documents in the delivered passages,
 not a separately measured rank over every search candidate. The script scores
@@ -41,7 +44,9 @@ same text. Display excerpts must remain contiguous source text.
 
 ## Results
 
-Both configurations produced the same retrieval and presentation counts:
+Both configurations produced the same retrieval and presentation counts. The
+final alpha columns include the coverage policy, grammatical plural matching,
+and quantity-display changes:
 
 | Measurement | Hashing, before | Hashing, alpha | BGE, before | BGE, alpha |
 |---|---:|---:|---:|---:|
@@ -62,11 +67,50 @@ selective emphasis; full text remains available through **Read in context** or
 the source citation. The 800-character paragraph threshold is a soft bound:
 complete sentences are preserved.
 
+The intermediate paragraph-preservation fix had already increased visible
+expected sentences from 7/11 to 10/11. The subsequent coverage and quantity
+changes retained those counts on this unchanged twelve-question set; they did
+not improve its historical-version miss or selective-emphasis count.
+
 This improves the visibility of source context. It does not make the selector
 understand the answer. Emphasis remains a conservative display heuristic, and
 source context still needs to be read. The two configurations tying on this
 small set does not establish that neural embeddings provide no benefit on
 other libraries or questions.
+
+## Separate quantity diagnostics
+
+The [quantity display fixture](../tests/fixtures/release_retrieval/quantity-cases.json)
+contains ten additional synthetic cases written before the quantity fix. It
+checks book and proposal allowances, singular/plural item and box wording,
+unrelated visitor counts, dates, times, weights, missing quantities and
+unmeasured targets. These are display regression cases, not a document-retrieval
+or general question-answering benchmark.
+
+| Measurement | Before quantity fix | Final alpha |
+|---|---:|---:|
+| Expected emphasis or deliberate absence of emphasis | 6/10 | 10/10 |
+| Required surrounding context visible | 10/10 | 10/10 |
+| Exact contiguous source excerpts | 10/10 | 10/10 |
+
+The selector now matches grammatical singular/plural forms and recognizes
+explicit number words or digits near the thing being counted. A question about
+items can therefore select a sentence about **one item**, including in a short
+passage. A time, price, weight or count of a different thing is not itself the
+requested count. Qualification checks still take precedence over emphasis.
+
+The heuristic improves these cases without generating a numerical answer or
+establishing general language understanding. Its English grammar and count-word
+rules are limited; ambiguous or qualified passages may remain unbolded even
+when they contain a useful quantity. The terminal and browser consume the same
+fixture, while separate retrieval tests check ranking and source access.
+
+Independent review also added [eleven negative regression cases](../tests/fixtures/release_retrieval/quantity-negative-cases.json)
+for indefinite articles, prices with currency symbols or codes, per-unit prices
+and weights, and negated counts. Those checks are separate from the prewritten
+ten-case metrics above. In particular, **one ticket costs £12** must not become
+a highlighted answer to how many tickets are available. A separate positive
+regression preserves an explicit ticket count beside price and date sentences.
 
 ## Remaining limitations
 
@@ -88,8 +132,8 @@ large libraries, Qdrant, non-English sources, OCR, or a range of machines.
 
 ## Timing observations
 
-In the alpha run, median search time across the twelve distinct questions was
-**1.82 ms with hashing** and **11.62 ms with BGE**. The model was already loaded
+In the final coverage-policy run, median search time across the twelve distinct
+questions was **2.44 ms with hashing** and **13.27 ms with BGE**. The model was already loaded
 by ingestion. These figures measure the in-process Find call only; they exclude
 process startup, installation, downloading weights, HTTP/MCP transport and
 terminal rendering. They are single-run observations on a tiny corpus, not a

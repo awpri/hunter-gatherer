@@ -24,6 +24,8 @@ from rich.padding import Padding
 from rich.text import Text
 
 from hunter_gatherer.config import Settings
+from hunter_gatherer.memory.lexical import normalize_word
+from hunter_gatherer.memory.quantity_focus import quantity_match_score, quantity_target
 
 _STOP = set("the and for that this with from what when where which who whom whose why how was were are does did has have had can could would should about into than then there their they them these those your you our its any all more find show tell give please looking need know".split())  # noqa: SIM905
 _STATUS = r"(?:real|genuine|authentic|fiction(?:al)?|fictitious|invented|fabricated|fake|made[\s-]+up|simulated|synthetic|demo(?:nstration)?|mock|sample)"
@@ -80,9 +82,11 @@ def passage_excerpt(quote: str, query: str) -> Excerpt:
     no selective emphasis. Mirrors the browser's display-only heuristic.
     """
     full = Excerpt(quote)
-    if len(quote) <= 140:
+    quantity = quantity_target(query)
+    if len(quote) <= 140 and quantity is None:
         return full
-    terms = set(re.findall(r"[^\W_]{3,}", query.lower())) - _STOP
+    terms = {normalize_word(word) for word in re.findall(r"[^\W_]{3,}", query.lower())
+             if word not in _STOP and (quantity is None or word not in {"many", "number"})}
     if not terms:
         return full
     authenticity = _authenticity_question(query)
@@ -105,10 +109,11 @@ def passage_excerpt(quote: str, query: str) -> Excerpt:
         if text.strip():
             units.append({
                 "start": start, "end": end,
-                "matches": terms & set(re.findall(r"[^\W_]{3,}", text.lower())),
+                "matches": terms & {normalize_word(word) for word in re.findall(r"[^\W_]{3,}", text.lower())},
                 "structural": (bool(plain_title_end and start < plain_title_end)
                     or bool(re.search(r"^\s*#{1,6}\s|^\s*(?:date|author|title|version)\s*:[^\n]*\s*$", text, re.I))),
                 "status": authenticity and _authenticity_wording(text),
+                "quantity": quantity_match_score(text, query) if quantity else 0,
             })
         start = end
     frequencies = {term: sum(term in unit["matches"] for unit in units) for term in terms}
@@ -118,6 +123,7 @@ def passage_excerpt(quote: str, query: str) -> Excerpt:
     for index, unit in enumerate(units):
         score = sum(1 / frequencies[term] for term in unit["matches"])
         score += len(terms) + 1 if unit["status"] else 0
+        score += len(terms) + 1 if unit["quantity"] else 0
         if unit["structural"]:
             score = 0
         if score > best_score:
@@ -151,6 +157,8 @@ def passage_excerpt(quote: str, query: str) -> Excerpt:
         end -= 1
     strong_match = units[best]["status"] or (bool(content_terms)
         and len(units[best]["matches"] & content_terms) >= min(2, len(content_terms)))
+    if quantity is not None:
+        strong_match = bool(units[best]["quantity"])
     # This deliberately favors plain context over confident-looking emphasis;
     # it does not attempt to decide whether two statements actually contradict.
     qualification = r"\b(?:no|not|never|without|only|however|although|unless|except|unverified|unconfirmed|unknown|untested|pending)\b|n['’]t\b"

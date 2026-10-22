@@ -21,6 +21,9 @@ GitHub under Apache 2.0.
 - Back up a library and restore it into a new directory, retaining citations
   and archived original files.
 - Configure themes, density, reduced motion and private-record access.
+- Match common regular plurals and accented spellings, and focus count questions
+  on quantities tied to the requested thing. Managed libraries present results
+  in the same question-focused order used to select their quotations.
 
 ### Naming and compatibility
 

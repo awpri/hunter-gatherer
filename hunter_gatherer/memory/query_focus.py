@@ -1,5 +1,6 @@
 """Cheap lexical coverage signals; never eligibility or answerability judgments."""
 import math
+import re
 
 
 def validate_relevance_policy(value):
@@ -10,6 +11,13 @@ def validate_relevance_policy(value):
 def query_terms(query):
     from hunter_gatherer.memory.documents import _tokens
     return set(_tokens(query))
+
+
+def question_terms(query):
+    """Drop quantity-question framing, preserving ordinary uses of 'many'."""
+    # 'many worlds' is still a meaningful lexical phrase. In 'how many books',
+    # 'many' describes the requested count, not a word the source must contain.
+    return query_terms(re.sub(r"\bhow\s+(?:many|much)\b", " ", query, flags=re.I)) - {"who"}
 
 
 def idf(term_frequency, n):

@@ -26,15 +26,16 @@ def _subject_references(packet, queries):
     source links, and requirement candidates can all retain useful context.
     Deferred sources keep exact Open references; this is not an absence verdict.
     """
-    from hunter_gatherer.memory.retrieval_assessment import _terms
+    from hunter_gatherer.memory.query_focus import question_terms, query_terms
+    from hunter_gatherer.memory.lexical import normalize_word
 
     candidates = [*packet["supporting_passages"], *packet["relevant_memories"]]
-    terms = set().union(*(_terms(query) for query in queries))
-    names = {word.casefold() for index, word in enumerate(re.findall(r"[^\W\d]\w*", queries[0]))
-             if word[0].isupper() and len(word) > 2 and word.casefold() in terms
+    terms = set().union(*(question_terms(query) for query in queries))
+    names = {normalize_word(word) for index, word in enumerate(re.findall(r"[^\W\d]\w*", queries[0]))
+             if word[0].isupper() and len(word) > 2 and normalize_word(word) in terms
              # A sentence-initial common noun is not a reliable named subject.
              and (index > 0 or any(letter.isupper() for letter in word[1:]))}
-    searchable = {item["citation"]: _terms(" ".join((
+    searchable = {item["citation"]: query_terms(" ".join((
         item.get("quote", item.get("text", "")), str(item.get("title", "")),
         str(item.get("location", {}).get("section") or "")))) for item in candidates}
     located = names & set().union(*searchable.values()) if searchable else set()
@@ -63,6 +64,14 @@ def _subject_references(packet, queries):
     return frozenset(deferred)
 
 
+def _quantity_priority(item, queries):
+    from hunter_gatherer.memory.quantity_focus import quantity_match_score
+
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", item.get("quote", item.get("text", "")))
+    return max((quantity_match_score(sentence, query)
+                for query in queries for sentence in sentences), default=0)
+
+
 def _coverage_priorities(packet, queries, *, statistics_candidates=None):
     """Allocate across memories and passages using the actual question.
 
@@ -74,7 +83,7 @@ def _coverage_priorities(packet, queries, *, statistics_candidates=None):
     """
     from collections import Counter
 
-    from hunter_gatherer.memory.query_focus import query_idfs, query_terms, weighted_coverage
+    from hunter_gatherer.memory.query_focus import question_terms, query_idfs, query_terms, weighted_coverage
 
     candidates = [*packet["supporting_passages"], *packet["relevant_memories"]]
     texts = [set(query_terms(item.get("quote", item.get("text", "")))) for item in candidates]
@@ -88,7 +97,7 @@ def _coverage_priorities(packet, queries, *, statistics_candidates=None):
                 str(item.get("location", {}).get("section") or ""))))
             for item in statistics_candidates]
     frequencies = Counter(term for present in statistics_terms for term in present)
-    weights = [query_idfs(query_terms(query), frequencies, len(statistics_terms)) for query in queries]
+    weights = [query_idfs(question_terms(query), frequencies, len(statistics_terms)) for query in queries]
     priorities = {}
     for item, body, meta in zip(candidates, texts, metadata, strict=True):
         semantic = item.get("semantic_relevance")
@@ -99,6 +108,10 @@ def _coverage_priorities(packet, queries, *, statistics_candidates=None):
             semantic = 0.0
         score = max((weighted_coverage(weight, body) + .25 * weighted_coverage(weight, meta)
                      for weight in weights), default=0.0) + .45 * semantic
+        # A requested count next to its noun is a useful ordering clue. Keep
+        # every other candidate and preserve the exact quote, including caveats.
+        # This does not assess whether a number is true, current or sufficient.
+        score += .25 * _quantity_priority(item, queries)
         priorities[item["citation"]] = score
     return priorities
 
@@ -110,9 +123,9 @@ def _body_first_references(packet, queries):
     requirement citation. Other candidates retain references instead of quotes.
     No query expansion, new embedding, source read or answer model is performed.
     """
-    from hunter_gatherer.memory.retrieval_assessment import _terms
+    from hunter_gatherer.memory.query_focus import question_terms, query_terms
 
-    terms = set().union(*(_terms(query) for query in queries))
+    terms = set().union(*(question_terms(query) for query in queries))
     if not terms:
         return frozenset()
     required = {citation for check in packet.get("requirement_checks", [])
@@ -129,7 +142,7 @@ def _body_first_references(packet, queries):
         if (isinstance(semantic, (int, float)) and not isinstance(semantic, bool)
                 and math.isfinite(semantic) and .35 <= semantic <= 1):
             continue
-        if not terms.intersection(_terms(body)):
+        if not terms.intersection(query_terms(body)):
             deferred.add(citation)
     return frozenset(deferred)
 
@@ -142,14 +155,15 @@ def _focused_references(packet, queries):
     semantic matches can preserve paraphrases; these thresholds are review
     heuristics, not probabilities. No extra embedding/model calls are made.
     """
-    from hunter_gatherer.memory.retrieval_assessment import _terms
+    from hunter_gatherer.memory.query_focus import question_terms, query_terms
+    from hunter_gatherer.memory.lexical import normalize_word
 
     generic = {"name", "named", "date", "year", "know", "known", "next", "his", "her"}
     focuses = []
     for query in queries:
-        terms = _terms(query)
-        names = {word.casefold() for index, word in enumerate(re.findall(r"[^\W\d]\w*", query))
-                 if word[0].isupper() and word.casefold() in terms
+        terms = question_terms(query)
+        names = {normalize_word(word) for index, word in enumerate(re.findall(r"[^\W\d]\w*", query))
+                 if word[0].isupper() and normalize_word(word) in terms
                  and (index > 0 or any(letter.isupper() for letter in word[1:]))}
         focus = terms - names - generic
         focuses.append((focus or terms, bool(names and focus)))
@@ -170,7 +184,7 @@ def _focused_references(packet, queries):
         if (isinstance(semantic, bool) or not isinstance(semantic, (int, float))
                 or not math.isfinite(semantic) or not 0 <= semantic <= 1):
             semantic = 0.0
-        body_terms = _terms(body)
+        body_terms = query_terms(body)
         if any(focus & body_terms or semantic >= (.70 if named else .60)
                for focus, named in focuses):
             continue
@@ -438,6 +452,17 @@ def _find_page(harness, state, max_tokens, *, continuation):
     priorities = (_coverage_priorities(packet, [query, *questions],
         **({"statistics_candidates": ordinary_statistics} if graph_metadata is not None else {}))
         if focused or graph_metadata is not None else None)
+    if focused:
+        # Present the same question-focused order used for budget allocation.
+        # The projector otherwise restores input ranks when all quotes fit.
+        # Cursor offsets still use retrieval_page.base_citations, and consumed
+        # candidates are tracked by ID, so this page-local ordering cannot skip
+        # or repeat a source when a smaller budget requires continuation.
+        for name in ("supporting_passages", "relevant_memories"):
+            # An explicit count wins a tie with the same noun in a heading.
+            # Stable allocation sorting below preserves this tie order too.
+            packet[name].sort(key=lambda item: (-priorities.get(item["citation"], 0.0),
+                                               -_quantity_priority(item, [query, *questions])))
     if policy in {"body_first", "focused"} or focused:
         # Match explanations were requested only to preserve semantic candidates.
         # Do not let their extra IDs/diagnostics displace evidence in the packet.

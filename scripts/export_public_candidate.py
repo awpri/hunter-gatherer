@@ -40,8 +40,11 @@ PUBLIC_TESTS = (
     "tests/test_secure_files.py",
     "tests/test_optional_dependencies.py", "tests/test_setup.py", "tests/test_terminal.py",
     "tests/test_namespace_compatibility.py", "tests/test_personal_library.py", "tests/test_release_retrieval.py",
+    "tests/test_quantity_retrieval.py",
 )
-PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json", "tests/fixtures/release_retrieval/cases.json")
+PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json", "tests/fixtures/release_retrieval/cases.json",
+                   "tests/fixtures/release_retrieval/quantity-cases.json",
+                   "tests/fixtures/release_retrieval/quantity-negative-cases.json")
 PUBLIC_DOCS = (
     "docs/public-release-guide.md", "docs/release-provenance-20261014.md", "docs/visual-regions.md",
     "docs/index.md", "docs/getting-started.md", "docs/usage.md", "docs/mcp.md",

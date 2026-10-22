@@ -153,7 +153,9 @@ def candidates(archive, terms, vector, fingerprint, include_sensitive, document_
         args.extend(document_ids)
     lexical = []
     if terms and archive._fts_available:
-        match = ' OR '.join('"' + term.replace('"', '""') + '"' for term in sorted(terms))
+        from hunter_gatherer.memory.lexical import search_variants
+        variants = set().union(*(search_variants(term) for term in terms))
+        match = ' OR '.join('"' + term.replace('"', '""') + '"' for term in sorted(variants))
         lexical = db.execute(f'''SELECT {_SELECT}, -bm25(archive_chunks_fts,0,2,1.5,1) AS lexical
         {_JOIN} JOIN archive_chunks_fts ON archive_chunks_fts.rowid=c.rowid
         WHERE archive_chunks_fts MATCH ? AND {clause}

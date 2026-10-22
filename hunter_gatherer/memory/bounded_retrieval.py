@@ -32,6 +32,7 @@ _TRIGGERS = {
 
 def ensure_index(db):
     if db.execute("SELECT 1 FROM sqlite_master WHERE name='archive_rank_stats'").fetchone():
+        _refresh_tokenizer(db)
         return
     db.execute("SAVEPOINT archive_rank_init")
     try:
@@ -46,10 +47,29 @@ def ensure_index(db):
             db.execute("INSERT INTO archive_rank_dirty SELECT id FROM archive_chunks")
             for statement in _TRIGGERS.values():
                 db.execute(statement)
+        _refresh_tokenizer(db)
         db.execute("RELEASE archive_rank_init")
     except Exception:
         db.execute("ROLLBACK TO archive_rank_init")
         db.execute("RELEASE archive_rank_init")
+        raise
+
+
+def _refresh_tokenizer(db):
+    """Invalidate only derived postings when lexical normalization changes."""
+    from hunter_gatherer.memory.lexical import TOKENIZER_VERSION
+
+    row = db.execute("SELECT value FROM store_meta WHERE key='archive_rank_tokenizer'").fetchone()
+    if row is not None and row[0] == TOKENIZER_VERSION:
+        return
+    db.execute("SAVEPOINT archive_rank_tokenizer")
+    try:
+        db.execute("INSERT OR IGNORE INTO archive_rank_dirty SELECT id FROM archive_chunks")
+        db.execute("INSERT OR REPLACE INTO store_meta VALUES ('archive_rank_tokenizer',?)", (TOKENIZER_VERSION,))
+        db.execute("RELEASE archive_rank_tokenizer")
+    except Exception:
+        db.execute("ROLLBACK TO archive_rank_tokenizer")
+        db.execute("RELEASE archive_rank_tokenizer")
         raise
 
 
@@ -296,7 +316,8 @@ def search(archive, query, top_k=5, include_sensitive=False, document_ids=None,
              "candidate_selection": metadata, "retrieval_assessment": assess_retrieval(query, [])}
     if not query or document_ids == []:
         return empty
-    terms = sorted(set(_tokens(query)))
+    from hunter_gatherer.memory.query_focus import question_terms
+    terms = sorted(question_terms(query))
     if len(terms) > 256:
         return _fallback(archive, query, top_k, include_sensitive, document_ids, response_format, explain, "query_term_limit", document_heads=document_heads, lexical_only=lexical_only, relevance_policy=relevance_policy, offset=offset)
     from hunter_gatherer.memory.retrieval_context import capture_query_vector, embedding_query

@@ -1,0 +1,16 @@
+{
+  "notice": "Additional negative regressions from independent review after the original ten quantity cases; excluded from their prewritten-case metrics.",
+  "cases": [
+    {"id": "indefinite-article-price", "question": "How many tickets are available?", "quote": "A ticket costs £12. The ticket desk opens at 09:00."},
+    {"id": "indefinite-an-price", "question": "How many admissions are available?", "quote": "An admission costs £12. The booking office opens at 09:00."},
+    {"id": "explicit-unit-price", "question": "How many tickets are available?", "quote": "One ticket costs £12. The ticket desk opens at 09:00."},
+    {"id": "explicit-unit-weight", "question": "How many bags may I bring?", "quote": "One bag weighs 18 kg. Ask the desk about the current baggage allowance."},
+    {"id": "dollar-prefix", "question": "How many tickets are available?", "quote": "$20 tickets are available from the counter. The counter opens at noon."},
+    {"id": "pound-prefix", "question": "How many tickets are available?", "quote": "£20 tickets are available from the counter. The counter opens at noon."},
+    {"id": "euro-prefix", "question": "How many tickets are available?", "quote": "€20 tickets are available from the counter. The counter opens at noon."},
+    {"id": "attached-currency-code", "question": "How many tickets are available?", "quote": "USD20 tickets are available from the counter. The counter opens at noon."},
+    {"id": "spaced-currency-code", "question": "How many tickets are available?", "quote": "USD 20 tickets are available from the counter. The counter opens at noon."},
+    {"id": "currency-code-after-number", "question": "How many tickets are available?", "quote": "20 USD tickets are available from the counter. The counter opens at noon."},
+    {"id": "negated-count", "question": "How many items may I bring?", "quote": "Do not bring two items. Ask the organizer about the current allowance."}
+  ]
+}

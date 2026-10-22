@@ -85,7 +85,7 @@ def main():
             record["semantic_missing_dependency_no_partial_directory"] = True
         source = root / "fictional-observatory.md"
         exact = "# Fictional observatory schedule\n\nThe fictional observatory opens on Friday at 21:30 UTC.\nWeather closures may cancel observing.\n"
-        source.write_text(exact, encoding="utf-8")
+        source.write_bytes(exact.encode("utf-8"))
         imported = cli_json(["import", str(source), "--library", str(library), "--json"])
         assert imported["counts"]["succeeded"] == 1 and imported["complete"]
         question = "When does the fictional observatory open?"

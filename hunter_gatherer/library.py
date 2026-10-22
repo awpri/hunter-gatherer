@@ -60,7 +60,7 @@ def _settings(target: Path, mode: str) -> Settings:
         embed_local_files_only=True, embedder_mismatch="error", local_only=True,
         openai_api_key="", anthropic_api_key="", messages_api_key="",
         qdrant_url="", qdrant_api_key="", library_maintenance_enabled=False,
-        recall_reranker_enabled=False,
+        recall_reranker_enabled=False, library_find_relevance_policy="coverage",
     )
 
 

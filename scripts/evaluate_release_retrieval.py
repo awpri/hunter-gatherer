@@ -61,11 +61,13 @@ def evaluate_mode(data: dict, mode: str, directory: Path) -> dict:
         openai_api_key="", anthropic_api_key="", messages_api_key="",
         qdrant_url="", qdrant_api_key="", library_maintenance_enabled=False,
         recall_reranker_enabled=False, archive_search_policy="exhaustive",
+        library_find_relevance_policy="coverage",
     )
     started = time.perf_counter()
     embedder = HashingEmbedder() if mode == "hashing" else SentenceTransformerEmbedder(BGE_MODEL)
     result = {"mode": mode, "model": settings.embed_model, "qdrant": False,
-              "max_tokens": 4096, "search_pages": 1, "cases": []}
+              "max_tokens": 4096, "search_pages": 1,
+              "library_find_relevance_policy": settings.library_find_relevance_policy, "cases": []}
     with MemoryStore(settings, embedder=embedder) as store:
         archive = DocumentArchive(store)
         doc_ids = {}

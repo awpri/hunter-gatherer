@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "notice": "Synthetic quantity-display regression cases written before the quantity fix; separate from the frozen alpha evaluation. Expected focus is null when no numerical answer should be emphasized.",
+  "cases": [
+    {
+      "id": "visitor-count-not-ticket-count",
+      "question": "How many tickets may each visitor buy?",
+      "quote": "Two visitors bought tickets. The ticket desk opens at 09:00 and closes in the afternoon. Payment is taken at the counter.",
+      "expected_focus": null,
+      "required_context": "Two visitors bought tickets."
+    },
+    {
+      "id": "proposal-limit",
+      "question": "How many proposals may one team submit?",
+      "quote": "Each team may submit at most three proposals. Submissions close on 12 May. A confirmation receipt is sent to the team contact.",
+      "expected_focus": "Each team may submit at most three proposals.",
+      "required_context": "Submissions close on 12 May."
+    },
+    {
+      "id": "borrow-books",
+      "question": "How many books may I borrow?",
+      "quote": "Elm lending desk\n\nThe lending desk opens at 10:00. Standard borrowers may take four books at a time. Each loan lasts fourteen days. Return receipts are printed at the self-service kiosk.",
+      "expected_focus": "Standard borrowers may take four books at a time.",
+      "required_context": "Each loan lasts fourteen days."
+    },
+    {
+      "id": "submit-proposals",
+      "question": "How many proposals can an applicant submit?",
+      "quote": "Submit 2 proposals per applicant. The deadline is 12 May at 17:00. The review starts the following week.",
+      "expected_focus": "Submit 2 proposals per applicant.",
+      "required_context": "The deadline is 12 May at 17:00."
+    },
+    {
+      "id": "singular-item",
+      "question": "How many items can a visitor bring?",
+      "quote": "Workshop drop-off guide\n\nOne volunteer weighs every item at reception. Bring one small household item and its instruction booklet. Each item must weigh less than 18 kilograms. The receptionist records the visitor's contact details.",
+      "expected_focus": "Bring one small household item and its instruction booklet.",
+      "required_context": "Each item must weigh less than 18 kilograms."
+    },
+    {
+      "id": "unknown-tickets",
+      "question": "How many tickets are allowed per person?",
+      "quote": "Tickets cost 12 pounds each. The number of tickets allowed per person has not been set. The box office opens at 09:30.",
+      "expected_focus": null,
+      "required_context": "The number of tickets allowed per person has not been set."
+    },
+    {
+      "id": "plural-boxes",
+      "question": "How many boxes may each guest bring?",
+      "quote": "Only one box per guest may enter the cloakroom. Label it with the guest's surname. The collection desk closes at 19:00.",
+      "expected_focus": "Only one box per guest may enter the cloakroom.",
+      "required_context": "Label it with the guest's surname."
+    },
+    {
+      "id": "bags-versus-weight",
+      "question": "How many bags may visitors check?",
+      "quote": "Luggage collection\n\nThe bag collection desk opens at 18:00. Bags heavier than 18 kilograms use the freight counter. Visitors may check two bags. Keep the claim receipt until collection is complete.",
+      "expected_focus": "Visitors may check two bags.",
+      "required_context": "Bags heavier than 18 kilograms use the freight counter."
+    },
+    {
+      "id": "dates-not-book-counts",
+      "question": "How many books may I borrow?",
+      "quote": "The books display opens on 12 May at 10:00. Borrowing allowances are handled by the lending desk. Shelves stand 2 metres high.",
+      "expected_focus": null,
+      "required_context": "Borrowing allowances are handled by the lending desk."
+    },
+    {
+      "id": "target-count-unmeasured",
+      "question": "How many entries did the competition receive?",
+      "quote": "The competition aimed to receive twenty entries. Organizers distributed the forms last week. No completed entries have been counted yet. The next update is due on Friday.",
+      "expected_focus": null,
+      "required_context": "No completed entries have been counted yet."
+    }
+  ]
+}

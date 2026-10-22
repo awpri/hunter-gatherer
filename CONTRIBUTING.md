@@ -43,8 +43,9 @@ npm run dev
 ```
 
 The development server uses port 5174 and proxies the separate backend on port
-8767. Start that backend with the explicit `demo serve` command from the setup
-guide. Preserve keyboard operation, accessible names, light/dark themes and
+8767. Create a separate demo library, then start its backend with
+`hunt demo serve ./demo-library --port 8767`. Preserve keyboard operation,
+accessible names, light/dark themes and
 reduced-motion preferences when changing the interface.
 
 ## Check your change

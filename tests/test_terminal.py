@@ -115,6 +115,32 @@ def test_excerpt_keeps_plain_title_out_of_an_unambiguous_body_match(newline):
     assert "Deliveries should use the side door." in excerpt.text
 
 
+@pytest.mark.parametrize("case", json.loads((Path(__file__).parent / "fixtures/release_retrieval/quantity-cases.json").read_text(encoding="utf-8"))["cases"], ids=lambda case: case["id"])
+def test_quantity_excerpt_keeps_requested_count_distinct_from_other_numbers(case):
+    excerpt = passage_excerpt(case["quote"], case["question"])
+    focus = excerpt.text[excerpt.focus_start:excerpt.focus_end] or None
+    assert focus == case["expected_focus"]
+    assert case["required_context"] in excerpt.text
+    assert excerpt.text in case["quote"]
+
+
+@pytest.mark.parametrize("case", json.loads((Path(__file__).parent / "fixtures/release_retrieval/quantity-negative-cases.json").read_text(encoding="utf-8"))["cases"], ids=lambda case: case["id"])
+def test_quantity_excerpt_does_not_treat_prices_or_articles_as_available_counts(case):
+    from hunter_gatherer.memory.quantity_focus import quantity_match_score
+
+    assert quantity_match_score(case["quote"], case["question"]) == 0
+    excerpt = passage_excerpt(case["quote"], case["question"])
+    assert excerpt.focus_start == excerpt.focus_end
+    assert excerpt.text in case["quote"]
+
+
+def test_quantity_excerpt_keeps_a_count_beside_separate_price_and_date():
+    quote = "Two tickets are available per visitor. One ticket costs £12. The booking desk opens on 14 May at 09:00."
+    excerpt = passage_excerpt(quote, "How many tickets are available per visitor?")
+    assert excerpt.text[excerpt.focus_start:excerpt.focus_end] == "Two tickets are available per visitor."
+    assert excerpt.text == quote
+
+
 def test_open_across_invocations_is_exact_and_needs_no_embedding(library, monkeypatch, capsys):
     directory, _ = library
     assert ask(directory, "weekly review schedule", "--json") == 0

@@ -118,12 +118,72 @@ function hasAuthenticityWording(text:string):boolean {
   || /\b(?:is|are|was|were)\s+(?:(?:not|entirely|all)\s+)*(?:real|genuine|authentic)\b/i.test(text);
 }
 
+// Mirrors memory/lexical.py for display matching only. Never rewrite source text.
+function normalizedDisplayWord(word:string):string {
+ let folded=word.toLowerCase().replaceAll('ß','ss').replaceAll('ς','σ');
+ if(!/^\p{L}+$/u.test(word))return folded;
+ folded=folded.normalize('NFKD').replace(/\p{M}/gu,'');
+ if(!/^[a-z]+$/.test(folded)||folded.length<=3||new Set(['news','series','species','https','headquarters']).has(folded)||/(?:ss|us|is|ics)$/.test(folded))return folded;
+ if(folded.endsWith('ies')&&folded.length>4)return folded.slice(0,-3)+'y';
+ if(/(?:sses|xes|zes|ches|shes)$/.test(folded))return folded.slice(0,-2);
+ return folded.endsWith('s')?folded.slice(0,-1):folded;
+}
+
+// Mirrors memory/quantity_focus.py. This count-word proximity signal neither
+// infers missing quantities nor establishes that a source claim is true.
+const quantityQuestionEnd=new Set('can could may might must should shall will would do does did is are was were have has had each per at in on for from to of with and or a an the you your we our i my it they their bring take borrow submit buy receive hold contain get'.split(' '));
+const quantityNumbers=new Set('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million dozen'.split(' '));
+const quantityCurrency=new Set('usd eur gbp jpy cad aud chf cny inr krw rub dollar euro yen rupee won rouble yuan penny pence cent'.split(' '));
+const quantityUnitAttribute=/^\s+(?:(?:may|can|must|will|would|usually|typically|normally)\s+)*(?:costs?|weighs?|measures?|lasts?\b|(?:is|are)\s+(?:priced|valued)|(?:has|have)\s+(?:a\s+)?(?:weight|price|length|height|width|volume|duration))\b/i;
+const quantityGapBlocked=new Set([...quantityQuestionEnd,...'by before after than that which who whose these those this its then now not never no bought sold received brought took holds contains checks weighs checked weighed return returns allowed available cost costs weigh kilogram gram kg g milligram mg litre liter ml meter metre cm mm km mile inch foot feet pound lb ounce oz hour minute second day week month year january february march april june july august september october november december jan feb mar apr jun jul aug sep oct nov dec'.split(' ')]);
+const quantityWords=(text:string)=>[...text.matchAll(/\d+(?:[.,]\d+)*|[\p{L}]+(?:['’][\p{L}]+)?/gu)];
+function quantityTarget(query:string):string|undefined {
+ const prefix=/\b(?:how\s+many|number\s+of)\s+/i.exec(query);
+ if(!prefix)return undefined;
+ const words:string[]=[];
+ for(const word of quantityWords(query.slice(prefix.index+prefix[0].length))){
+  const raw=word[0].toLowerCase();
+  if(quantityQuestionEnd.has(raw)||words.length===4)break;
+  const normalized=normalizedDisplayWord(raw);
+  words.push(normalized);
+  if(raw.endsWith('s')&&normalized!==raw)return normalized;
+ }
+ return words.at(-1);
+}
+function quantityMatchScore(text:string,query:string):number {
+ const target=quantityTarget(query);
+ if(!target)return 0;
+ const identifiers=(value:string)=>new Set([...value.matchAll(/\b(?=[a-z0-9-]*[a-z])(?=[a-z0-9-]*\d)[a-z0-9]+(?:-[a-z0-9]+)*\b/gi)].map(match=>match[0].toLowerCase()));
+ const queryIds=identifiers(query),sourceIds=identifiers(text);
+ if(queryIds.size&&sourceIds.size&&![...queryIds].some(id=>sourceIds.has(id)))return 0;
+ if(/\b(?:not|never|cannot)\b|n['’]t\b|\bno\b(?!\s+(?:more|fewer|less)\s+than\b)/i.test(text))return 0;
+ const tokens=quantityWords(text);
+ for(let index=0;index<tokens.length;index++){
+  if(normalizedDisplayWord(tokens[index][0])!==target)continue;
+  // Reject per-unit attributes, without suppressing counts beside separate prices.
+  if(quantityUnitAttribute.test(text.slice(tokens[index].index!+tokens[index][0].length)))continue;
+  for(let quantityIndex=Math.max(0,index-3);quantityIndex<index;quantityIndex++){
+   const quantity=tokens[quantityIndex],raw=quantity[0].toLowerCase(),numeric=/^\d+(?:[.,]\d+)*$/.test(raw);
+   if(!numeric&&!quantityNumbers.has(raw))continue;
+   if(quantityIndex>0&&quantityCurrency.has(tokens[quantityIndex-1][0].toLowerCase()))continue;
+   const before=text.slice(0,quantity.index!),after=text.slice(quantity.index!+quantity[0].length);
+   if(numeric&&(/[\w:/.$£€¥₹₩₽-]$/.test(before)||/^[:/.-]\w/.test(after)))continue;
+   const gap=tokens.slice(quantityIndex+1,index);
+   if(gap.some(word=>quantityGapBlocked.has(word[0].toLowerCase())||quantityCurrency.has(word[0].toLowerCase())||(normalizedDisplayWord(word[0])!==word[0].toLowerCase()&&!quantityNumbers.has(word[0].toLowerCase()))||/(?:ed|ing)$/i.test(word[0])))continue;
+   if(tokens.slice(quantityIndex,index).some((left,offset)=>!/^[\s-]+$/.test(text.slice(left.index!+left[0].length,tokens[quantityIndex+offset+1].index!))))continue;
+   return 1;
+  }
+ }
+ return 0;
+}
+
 /** A conservative source window; matching words do not establish an answer. */
 export function passageExcerpt(quote:string,query:string):{text:string;leading:boolean;trailing:boolean;clipped:boolean;focusStart?:number;focusEnd?:number} {
  const full={text:quote,leading:false,trailing:false,clipped:false};
- if(quote.length<=140)return full;
+ const quantity=quantityTarget(query);
+ if(quote.length<=140&&!quantity)return full;
  const stop=new Set('the and for that this with from what when where which who whom whose why how was were are does did has have had can could would should about into than then there their they them these those your you our its any all more find show tell give please looking need know'.split(' '));
- const terms=new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(term=>!stop.has(term)));
+ const terms=new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(term=>!stop.has(term)&&(!quantity||!['many','number'].includes(term))).map(normalizedDisplayWord));
  if(!terms.size)return full;
  const authenticity=asksAboutAuthenticity(query);
  const paragraphs:{start:number;end:number}[]=[];
@@ -136,7 +196,7 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
  // Rank a short, unpunctuated initial title line as structure, not an answer.
  const initial=quote.slice(0,paragraphs[0].end).trim();
  const plainTitleEnd=paragraphs.length>1&&initial.length>0&&initial.length<=120&&!initial.includes('\n')&&!/[.!?;:]["”’')\]]*$/.test(initial)?paragraphs[0].end:0;
- const units:{start:number;end:number;score:number;matches:string[];structural:boolean;statusMatch:boolean}[]=[];
+ const units:{start:number;end:number;score:number;matches:string[];structural:boolean;statusMatch:boolean;quantityMatch:number}[]=[];
  // Keep complete sentences and paragraphs; soft line wraps must not split meaning.
  // Offsets always refer to the raw source, including its original whitespace.
  const boundaries=[...new Set([...quote.matchAll(/[.!?]["”’')\]]*(?=\s|$)|\r?\n[ \t]*(?:\r?\n)+/gu),...quote.matchAll(/^#{1,6}[^\n]*(?:\n|$)/gm)].map(match=>match.index!+match[0].length))].sort((a,b)=>a-b);
@@ -145,10 +205,10 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
  for(const end of boundaries){
   const text=quote.slice(start,end);
   if(text.trim()){
-   const words=new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);
+   const words=new Set((text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]).map(normalizedDisplayWord));
    const matches=[...terms].filter(term=>words.has(term));
    const structural=!!(plainTitleEnd&&start<plainTitleEnd)||/^\s*#{1,6}\s/.test(text)||/^\s*(?:date|author|title|version)\s*:[^\n]*\s*$/i.test(text);
-   units.push({start,end,score:0,matches,structural,statusMatch:authenticity&&hasAuthenticityWording(text)});
+   units.push({start,end,score:0,matches,structural,statusMatch:authenticity&&hasAuthenticityWording(text),quantityMatch:quantity?quantityMatchScore(text,query):0});
   }
   start=end;
  }
@@ -162,7 +222,7 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
   // For explicit authenticity questions, source-status wording matters more
   // than repeated project names. This changes presentation only: it neither
   // verifies a claim nor filters sources, and negation remains in the sentence.
-  unit.score=unit.structural?0:overlap+(unit.statusMatch?terms.size+1:0);
+  unit.score=unit.structural?0:overlap+(unit.statusMatch?terms.size+1:0)+(unit.quantityMatch?terms.size+1:0);
  }
  const best=units.reduce((selected,unit,index)=>unit.score>(units[selected]?.score||0)?index:selected,-1);
  if(best<0)return full;
@@ -187,7 +247,7 @@ export function passageExcerpt(quote:string,query:string):{text:string;leading:b
  while(to>from&&/\s/.test(quote[to-1]))to--;
  const leading=!!quote.slice(0,from).trim(),trailing=!!quote.slice(to).trim();
  const result={text:quote.slice(from,to),leading,trailing,clipped:leading||trailing};
- const strongMatch=units[best].statusMatch||(contentTerms.size>0&&units[best].matches.filter(term=>contentTerms.has(term)).length>=Math.min(2,contentTerms.size));
+ const strongMatch=quantity?!!units[best].quantityMatch:units[best].statusMatch||(contentTerms.size>0&&units[best].matches.filter(term=>contentTerms.has(term)).length>=Math.min(2,contentTerms.size));
  // Conservatively remove emphasis; do not claim to resolve contradictions.
  const qualification=/\b(?:no|not|never|without|only|however|although|unless|except|unverified|unconfirmed|unknown|untested|pending)\b|n['’]t\b/i;
  const surroundingQualification=units.some((unit,index)=>index>=first&&index<=last&&index!==best&&qualification.test(quote.slice(unit.start,unit.end)));

@@ -18,6 +18,12 @@ is a deliberate matching rule, not general reasoning. Keyword and semantic
 retrieval can both return the right document with an unhelpful passage; check the
 source rather than treating its rank or highlighting as a verdict.
 
+Managed libraries match common regular plurals and accented spellings, so
+“items” can find “item” and “cafe” can find “café.” Count questions can prioritize
+an explicit quantity beside the requested thing, such as “one small household
+item.” These are local matching rules, not a language model or a complete
+understanding of grammar. Unrelated prices, dates and times are not count answers.
+
 ## What does Copy include?
 
 Loaded source passages and saved memories, with citations. Copying a selection

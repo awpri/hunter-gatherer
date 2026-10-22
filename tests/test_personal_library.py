@@ -55,7 +55,7 @@ def test_library_import_search_restart_backup_restore_retains_citations(tmp_path
     create_library(target)
     source = tmp_path / "observatory.md"
     exact = "# Observatory schedule\n\nThe telescope opens on Friday at 21:30 UTC.\nWeather closures may cancel observing.\n"
-    source.write_text(exact, encoding="utf-8")
+    source.write_bytes(exact.encode("utf-8"))
     result = import_files(target, [str(source)])
     assert result["counts"]["succeeded"] == 1 and result["complete"]
     settings = library_settings(target)
