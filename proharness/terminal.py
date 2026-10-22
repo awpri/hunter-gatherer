@@ -5,7 +5,9 @@ provenance, omissions and access decisions; neither path generates an answer.
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import ipaddress
 import json
 import re
 import sqlite3
@@ -15,6 +17,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 from rich.console import Console
 from rich.padding import Padding
@@ -297,7 +300,130 @@ def _source_reader(settings: Settings):
         connection.close()
 
 
+def _server_endpoint(value: str) -> str:
+    """Select one explicit loopback origin; never resolve arbitrary hostnames."""
+    try:
+        url = urlsplit(value)
+        host = url.hostname
+        port = url.port
+        if (url.scheme not in {"http", "https"} or not host
+                or url.username is not None or url.password is not None
+                or url.path not in {"", "/"} or url.query or url.fragment
+                or any(char.isspace() or ord(char) < 32 for char in value)):
+            raise ValueError
+        if host == "localhost":
+            host = "127.0.0.1"
+        address = ipaddress.ip_address(host)
+        if not address.is_loopback or "%" in host:
+            raise ValueError
+    except ValueError as exc:
+        raise ValueError("--server requires a loopback HTTP(S) origin, such as http://127.0.0.1:8767, without credentials, a path, query or fragment.") from exc
+    authority = f"[{host}]" if address.version == 6 else host
+    if port is not None:
+        authority += f":{port}"
+    return f"{url.scheme}://{authority}/mcp/library"
+
+
+async def _reject_server_redirect(response):
+    # The MCP SDK follows same-origin redirects itself, regardless of the HTTP
+    # client's follow_redirects setting. Reject before that transport can follow.
+    if 300 <= response.status_code < 400:
+        raise ValueError("The selected library redirected the request; use its direct loopback origin.")
+
+
+def _server_http_client():
+    import httpx2
+
+    return httpx2.AsyncClient(trust_env=False, follow_redirects=False,
+                             timeout=httpx2.Timeout(60, connect=5),
+                             event_hooks={"response": [_reject_server_redirect]})
+
+
+def _server_payload(response, operation: str) -> dict:
+    """Require the structured Find/Open contract, never interpret source text."""
+    body = response.structured_content
+    if not isinstance(body, dict):
+        raise ValueError("The selected server did not return a structured library response. Run a compatible h/g library server.")
+    if response.is_error or body.get("error"):
+        raise ValueError("The selected library could not complete the request: " + str(body.get("error") or "tool error"))
+    if operation == "ask":
+        valid = (all(isinstance(body.get(key), list) for key in ("supporting_passages", "relevant_memories"))
+                 and isinstance(body.get("continuation"), dict)
+                 and (body["continuation"].get("next_cursor") is None
+                      or isinstance(body["continuation"].get("next_cursor"), str)))
+    else:
+        valid = any(isinstance(body.get(key), list) for key in ("sources", "chunks", "sections"))
+    if not valid:
+        raise ValueError("The selected server returned an incompatible library response.")
+    return body
+
+
+async def _server_evidence(args) -> tuple[dict, int]:
+    """Use the running library's store/model through its existing MCP interface."""
+    from mcp.client.session import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    from proharness.memory.output_budget import budget_report
+
+    endpoint = _server_endpoint(args.server)
+    try:
+        async with (
+            _server_http_client() as http,
+            streamable_http_client(endpoint, http_client=http) as streams,
+            ClientSession(streams[0], streams[1], read_timeout_seconds=60) as client,
+        ):
+            await client.initialize()
+            common = {"max_tokens": args.max_tokens, "include_sensitive": args.include_sensitive}
+            if args.cmd == "open":
+                body = _server_payload(await client.call_tool("proharness_open", {
+                    **common, "refs": args.refs, "view": args.view, "offset": args.offset,
+                }), "open")
+                return {"schema_version": 1, "kind": "open", "result": body}, int(
+                    any(status != "available" for status in body.get("statuses", [])))
+            pages, cursor, identity = [], None, None
+            for _ in range(args.pages):
+                arguments = {**common, **({"cursor": cursor} if cursor else {"query": args.question})}
+                page = _server_payload(await client.call_tool("proharness_find", arguments), "ask")
+                store = page.get("store", {}).get("id")
+                if pages and store != identity:
+                    raise ValueError("The selected library changed during the search; rerun the question.")
+                identity = store
+                cursor = page["continuation"].get("next_cursor")
+                # Keep the same CLI envelope for local and server use;
+                # consume continuations here, not across invocations.
+                page["continuation"]["next_cursor"] = None
+                budget_report(page, args.max_tokens)
+                pages.append(page)
+                if not cursor:
+                    break
+            return {"schema_version": 1, "kind": "ask", "question": args.question,
+                    "pages": pages, "has_more": bool(cursor)}, 0
+    except Exception as exc:
+        # AnyIO wraps transport errors in exception groups. Keep the actionable
+        # cause visible rather than "unhandled errors in a TaskGroup".
+        reason = exc
+        while isinstance(reason, BaseExceptionGroup) and reason.exceptions:
+            reason = reason.exceptions[0]
+        raise RuntimeError(f"Could not use the selected library at {endpoint}: {reason}. No local library was opened.") from exc
+
+
 def cmd_evidence(args, settings: Settings | None) -> int:
+    if getattr(args, "server", None) is not None:
+        with contextlib.redirect_stdout(sys.stderr):
+            result, code = asyncio.run(_server_evidence(args))
+    else:
+        result, code = _local_evidence(args, settings)
+    if args.json:
+        # Default ASCII escaping preserves arbitrary source text losslessly without
+        # emitting terminal escape sequences, bidi controls or C1 controls.
+        print(json.dumps(result, separators=(",", ":")))
+    else:
+        output = Console(markup=False, highlight=False)
+        (render_ask if args.cmd == "ask" else render_open)(result, output)
+    return code
+
+
+def _local_evidence(args, settings: Settings | None) -> tuple[dict, int]:
     # Libraries/model loaders occasionally print progress; never contaminate JSON.
     with contextlib.redirect_stdout(sys.stderr):
         settings = _existing_settings(args, settings)
@@ -346,11 +472,4 @@ def cmd_evidence(args, settings: Settings | None) -> int:
                                     include_sensitive=args.include_sensitive)
             result = {"schema_version": 1, "kind": "open", "result": body}
             code = int(bool(body.get("error")) or any(status != "available" for status in body.get("statuses", [])))
-    if args.json:
-        # Default ASCII escaping preserves arbitrary source text losslessly without
-        # emitting terminal escape sequences, bidi controls or C1 controls.
-        print(json.dumps(result, separators=(",", ":")))
-    else:
-        output = Console(markup=False, highlight=False)
-        (render_ask if args.cmd == "ask" else render_open)(result, output)
-    return code
+    return result, code

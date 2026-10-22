@@ -358,6 +358,13 @@ def main():
                         else:
                             raise TimeoutError("Demo readiness exceeded 60 seconds")
                         asset_report = check_packaged_assets(http, url)
+                    if number == 1:
+                        warm = cli_json(["ask", "Is the Lantern pilot real?", "--server", url, "--json"])
+                        warm_passage = next(item for page in warm["pages"] for item in page["supporting_passages"]
+                                            if "Fictional source." in item["quote"])
+                        warm_opened = cli_json(["open", warm_passage["citation"], "--server", url, "--json"])
+                        assert warm_passage["quote"] in [item["quote"] for item in warm_opened["result"]["sources"]]
+                        record["terminal_warm_server"] = True
                     record["checks"].append(
                         {**asyncio.run(asyncio.wait_for(exercise(url, number), 60)),
                          "assets": asset_report, "restored_store": number == 3}

@@ -121,8 +121,8 @@
     },
     {
       "path": "docs/cli.md",
-      "bytes": 5432,
-      "sha256": "c9f7936de556c34549c25237af21a651749904f7e8bcdd69acf3e06067fc7c81"
+      "bytes": 6771,
+      "sha256": "88797b64869b7d77b22fa9934e1e99b13764b08ea521adc741e7d6daa2fa20fc"
     },
     {
       "path": "docs/demo.md",
@@ -131,8 +131,8 @@
     },
     {
       "path": "docs/faq.md",
-      "bytes": 5386,
-      "sha256": "880357af425fc0e54a608692fefea4293a4a280543cc7ccc1257a633cb7e4afa"
+      "bytes": 6564,
+      "sha256": "43327a9e7bc29e66924bf46871551b1f14b259dd1112b7f1fe7616fc69978ea8"
     },
     {
       "path": "docs/getting-started.md",
@@ -951,8 +951,8 @@
     },
     {
       "path": "proharness/cli.py",
-      "bytes": 49081,
-      "sha256": "ff48ef313694cdc0647afbac74704dbb8593a0191a252b8a51e6d0e906d25b46"
+      "bytes": 49309,
+      "sha256": "565bdbba6d5cfdc6ab72fa91f2f696b46115ae886bdce49342d72cd549b0ac3e"
     },
     {
       "path": "proharness/config.py",
@@ -1821,8 +1821,8 @@
     },
     {
       "path": "proharness/terminal.py",
-      "bytes": 19455,
-      "sha256": "dedd448122baa67eb10c0fa00acf5915995de78ecc38f42006a72c8bb61e056e"
+      "bytes": 25356,
+      "sha256": "df949091bf103dadb71c96f496422082b3524c568d6f93e8ca1d4c489fa19860"
     },
     {
       "path": "proharness/tools/__init__.py",
@@ -1911,8 +1911,8 @@
     },
     {
       "path": "scripts/smoke_packaged_demo.py",
-      "bytes": 19159,
-      "sha256": "76e599be744523ff61ce71dab7749835a7afad44c452d0b2b420ca5be72a6977"
+      "bytes": 19790,
+      "sha256": "f2fd3fd2f5c1c78a9bcd821b48a1a483bab673f179239db3623020d750adb199"
     },
     {
       "path": "tests/conftest.py",
@@ -2086,8 +2086,8 @@
     },
     {
       "path": "tests/test_terminal.py",
-      "bytes": 12218,
-      "sha256": "71a289b0defa73466747568366bc036ca6c7c161e3edf71c2dcc93a7e308aaa3"
+      "bytes": 19793,
+      "sha256": "d6254b9a12426b4fb125a8c8a6212d79554faa27951e6dcf2fbe03406ef6d11a"
     },
     {
       "path": "tests/test_visual_regions.py",

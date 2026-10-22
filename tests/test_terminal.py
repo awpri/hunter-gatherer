@@ -6,6 +6,7 @@ import json
 import socket
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from rich.console import Console
@@ -235,3 +236,139 @@ def test_human_source_navigation_retains_title_version_page_and_limitations():
                             "chunks": [{"quote": "Exact quote.", "citation": "[doc:example]"}],
                             "omitted_counts": {"output_budget": 1}}}, output)
     assert "Lab report" in stream.getvalue() and "Some context was omitted" in stream.getvalue()
+
+
+@pytest.fixture
+def warm_library(library, monkeypatch):
+    """Real MCP HTTP protocol and shared store, without opening a network socket."""
+    import httpx2
+
+    from proharness.mcp.server import _http_options, build_server
+    from proharness.mcp.tools import Harness
+    from proharness.server.library_app import build_library_app
+
+    directory, manifest = library
+    with MemoryStore(demo_settings(directory)) as store:
+        harness = Harness(store=store, settings=store.settings,
+                          loop=SimpleNamespace(embedder=store.embedder), cost=SimpleNamespace())
+        original_client = httpx2.AsyncClient
+
+        class InProcessClient(original_client):
+            def __init__(self, **kwargs):
+                assert kwargs["trust_env"] is False
+                assert kwargs["follow_redirects"] is False
+                server = build_server(harness=harness, tool_profile="library")[0]
+                self.app = build_library_app(harness, server, http_options=_http_options("127.0.0.1", 8767))
+                super().__init__(transport=httpx2.ASGITransport(app=self.app), **kwargs)
+
+            async def __aenter__(self):
+                self.lifespan = self.app.router.lifespan_context(self.app)
+                await self.lifespan.__aenter__()
+                return await super().__aenter__()
+
+            async def __aexit__(self, *args):
+                try:
+                    await super().__aexit__(*args)
+                finally:
+                    await self.lifespan.__aexit__(*args)
+
+        monkeypatch.setattr(httpx2, "AsyncClient", InProcessClient)
+        monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
+        monkeypatch.setattr("proharness.memory.embeddings.get_embedder", lambda *a: pytest.fail("client loaded a model"))
+        monkeypatch.setattr("proharness.memory.store.MemoryStore", lambda *a, **k: pytest.fail("client opened a database"))
+        yield store, manifest
+
+
+def test_server_ask_open_share_warm_store_and_exact_contract(warm_library, capsys):
+    store, manifest = warm_library
+    assert cli.main(["ask", "Is the Lantern pilot real?", "--server", "http://localhost:8767/", "--json"]) == 0
+    response = json.loads(capsys.readouterr().out)
+    assert response["kind"] == "ask" and response["schema_version"] == 1
+    page = response["pages"][0]
+    passage = page["supporting_passages"][0]
+    expected = next(item for item in manifest["documents"] if item["document_id"] == passage["document_id"])
+    assert passage["quote"] == Path(expected["input"]).read_text(encoding="utf-8")
+    assert page["continuation"]["next_cursor"] is None
+    assert page["budget"]["serialized_bytes"] <= 4 * page["budget"]["max_tokens"]
+    for view in ("text", "context", "outline"):
+        assert cli.main(["open", passage["citation"], "--server", "http://127.0.0.1:8767",
+                         "--view", view, "--json"]) == 0
+        body = json.loads(capsys.readouterr().out)["result"]
+        if view == "outline":
+            assert body["sections"]
+        else:
+            assert any(item["quote"] == passage["quote"] for item in body.get("sources", body.get("chunks")))
+    private = store.add(Memory(text="Secret fictional launchphrase.", metadata={"sensitive": True}))
+    command = ["open", f"[mem:{private.id}]", "--server", "http://127.0.0.1:8767", "--json"]
+    assert cli.main(command) == 1
+    output = capsys.readouterr()
+    assert "Secret fictional" not in output.out
+    assert json.loads(output.out)["result"]["statuses"] == ["unavailable"]
+    assert cli.main(command + ["--include-sensitive"]) == 0
+    assert json.loads(capsys.readouterr().out)["result"]["sources"][0]["text"] == private.text
+
+
+def test_server_ask_consumes_real_cursors_without_query_replay(warm_library, capsys):
+    store, _ = warm_library
+    for number in range(9):
+        store.add(Memory(text=f"Copper sensor calibration {number}."))
+    assert cli.main(["ask", "Copper sensor calibration", "--server", "http://127.0.0.1:8767",
+                     "--pages", "2", "--json"]) == 0
+    response = json.loads(capsys.readouterr().out)
+    assert len(response["pages"]) == 2
+    assert all(page["continuation"]["next_cursor"] is None for page in response["pages"])
+    assert response["pages"][0]["store"] == response["pages"][1]["store"]
+
+
+@pytest.mark.parametrize("url", ["", "https://example.com", "http://192.168.1.1:8767", "file:///tmp/library",
+                                  "http://user:secret@127.0.0.1:8767", "http://127.0.0.1:8767/mcp/library",
+                                  "http://127.0.0.1:8767/?secret=x", "http://127.0.0.1:8767/#x",
+                                  "http://127.0.0.1:bad", "http://127.0.0.1:\n8767"])
+def test_server_rejects_nonlocal_or_ambiguous_destinations_before_connection(url, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
+    monkeypatch.setattr("proharness.terminal._server_http_client", lambda: pytest.fail("network connection attempted"))
+    assert cli.main(["ask", "question", "--server", url, "--json"]) == 1
+    output = capsys.readouterr()
+    assert output.out == "" and "loopback HTTP(S) origin" in json.loads(output.err)["error"]["message"]
+
+
+@pytest.mark.parametrize("mode", ["redirect", "unavailable", "wrong_service"])
+def test_server_failures_do_not_fall_back_or_follow_redirects(mode, monkeypatch, capsys):
+    import httpx2
+
+    requested = []
+    original_client = httpx2.AsyncClient
+    def respond(request):
+        requested.append(str(request.url))
+        if mode == "redirect":
+            return httpx2.Response(307, headers={"location": "/different-library"})
+        if mode == "unavailable":
+            raise httpx2.ConnectError("Connection refused", request=request)
+        return httpx2.Response(200, json={"other_service": True})
+    monkeypatch.setattr(httpx2, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx2.MockTransport(respond), **kwargs))
+    monkeypatch.setattr(cli, "get_settings", lambda: pytest.fail("personal configuration loaded"))
+    monkeypatch.setattr("proharness.terminal._existing_settings", lambda *a: pytest.fail("local fallback"))
+    assert cli.main(["ask", "question", "--server", "http://127.0.0.1:8767", "--json"]) == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "No local library was opened" in json.loads(output.err)["error"]["message"]
+    assert requested and set(requested) == {"http://127.0.0.1:8767/mcp/library"}
+
+
+def test_server_library_options_are_mutually_exclusive():
+    for option in ("--database", "--demo-library"):
+        with pytest.raises(SystemExit) as error:
+            cli.build_parser().parse_args(["ask", "question", "--server", "http://127.0.0.1:8767", option, "x"])
+        assert error.value.code == 2
+
+
+def test_server_requires_structured_contract_and_reports_tool_errors():
+    from proharness.terminal import _server_endpoint, _server_payload
+
+    assert _server_endpoint("http://[::1]:8767/") == "http://[::1]:8767/mcp/library"
+    for body in (None, [], {"some_other_api": True}):
+        with pytest.raises(ValueError, match="structured library response|incompatible library response"):
+            _server_payload(SimpleNamespace(structured_content=body, is_error=False), "ask")
+    with pytest.raises(ValueError, match="Library is not ready"):
+        _server_payload(SimpleNamespace(structured_content={"error": "Library is not ready"}, is_error=True), "ask")

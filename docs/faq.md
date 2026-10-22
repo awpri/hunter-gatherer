@@ -70,12 +70,33 @@ pip or uv in the h/g environment to add only the extras you need; see
 An existing semantic library still needs its configured embedding model. Missing
 packages must not silently change that model or replace it with demo hashing.
 
+## How do SQLite, neural embeddings and Qdrant fit together?
+
+SQLite stores the library's records, imported passages, metadata and keyword
+search index. A neural embedding model converts text into numerical vectors so
+search can compare meaning as well as words. The model is a computation step,
+not a replacement database.
+
+Qdrant is an optional index for memory vectors. Semantic search can work without
+it, using h/g's local vector backend. The current document archive and its passage
+search remain on the SQLite path even when memory vectors use Qdrant. These are
+parts of the same library, not competing choices for where all your data lives.
+
+## Does every terminal question need to load the model again?
+
+A standalone local Ask command starts its own process. For repeated questions,
+use `hunt ask "question" --server http://127.0.0.1:8767` against a running h/g
+library server. The server keeps its configured model instance available across
+requests; the CLI does not load another model. The fictional demo uses hashing,
+so it has no neural model to load. See [server usage](cli.md#reuse-a-running-library).
+
 ## Can an agent use the command line instead of MCP?
 
 Yes. `hunt ask "question" --json` returns structured evidence, and `hunt open`
 reads a citation. Both use the same source-reading and access rules as the
-library. Pass `--demo-library DIR` for the isolated demo. The [terminal guide](cli.md)
-covers output limits and exit codes; MCP remains useful for an ongoing session.
+library. Pass `--demo-library DIR` for the isolated demo, or `--server URL` to use
+an already running local library. The [terminal guide](cli.md) covers output
+limits and exit codes; MCP remains useful for an ongoing session.
 
 ## Is everything local?
 

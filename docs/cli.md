@@ -24,6 +24,33 @@ focused excerpt helps you scan; the source reader provides surrounding context.
 Saved memories and source leads remain distinguishable from document quotations.
 No model key or running web server is needed for this demo command.
 
+## Reuse a running library
+
+For repeated questions, connect the CLI to the same local server as the browser.
+Start an existing demo in one terminal:
+
+```bash
+hunt demo serve ./demo-library --port 8767
+```
+
+In another terminal, using the h/g environment:
+
+```bash
+hunt ask "When is the weekly review?" --server http://127.0.0.1:8767
+hunt ask "Is the Lantern pilot real?" --server http://127.0.0.1:8767 --json
+```
+
+`hunt open` accepts the same `--server` option. The CLI uses the server's library
+and existing model instance, so it does not initialize a local model or read
+local library settings for these requests. A configured neural model can stay
+loaded in the server across questions; the fictional demo uses hashing and has
+no neural model to warm up.
+
+Use a loopback HTTP(S) base URL with no path, query, fragment or credentials. The CLI selects the
+library endpoint itself. The server must expose that endpoint, as `demo serve`
+and `proharness-mcp --with-library-ui` do. If it is unavailable, the command
+reports the failure; it does not fall back to a different local database.
+
 ## Follow a source
 
 Copy a citation label from the results, including its document/chunk identifiers:
@@ -73,24 +100,28 @@ hunt ask "Who owned the Lantern pilot before the change?" --demo-library ./demo-
 ```
 
 `--pages` accepts 1–20; `has_more` tells a script whether additional matches
-remain. Search cursors belong to the running process, so they cannot be saved
-and replayed by a later CLI invocation. An exhausted result set does not prove
-that the library contains no other relevant information.
+remain. The CLI follows continuation cursors during that command; it has no
+cursor replay flag. Rerunning with a larger `--pages` value starts a new search.
+An exhausted result set does not prove that the library contains no other
+relevant information.
 
 ## Choose the library explicitly
 
 | Selection | Behavior |
 | --- | --- |
+| `--server URL` | Queries a running local library server using its settings and model, without opening a local database. |
 | `--demo-library DIR` | Opens an existing fictional demo with isolated settings and hashing embeddings. It ignores normal configuration. |
 | `--database FILE` | Selects an existing SQLite library using the normal configured embedding model. |
-| Neither flag | Uses the normal configured library and inherited settings. |
+| No selection flag | Uses the normal configured library and inherited settings. |
+
+`--server`, `--demo-library` and `--database` are mutually exclusive.
 
 Use `--demo-library` while evaluating h/g. A personal library requires its own
 configuration and compatible optional dependencies. Do not point h/g at your
 live ProHarness database as an installation shortcut. A deliberate migration
 should first validate a separate backup/copy; see the [roadmap](roadmap.md).
-Open reads the selected library without writing. Ask uses normal library
-initialization, which may update its schema, indexes or caches.
+Open reads the selected library without writing. Direct local Ask uses normal
+library initialization, which may update its schema, indexes or caches.
 
 `--include-sensitive` explicitly includes sensitive records on that invocation;
 omitting it leaves them withheld. Use it only when the output destination is

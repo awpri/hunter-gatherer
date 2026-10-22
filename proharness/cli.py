@@ -801,6 +801,7 @@ def build_parser() -> argparse.ArgumentParser:
         library = command.add_mutually_exclusive_group()
         library.add_argument("--database", metavar="FILE", help="existing library database; defaults to configured store")
         library.add_argument("--demo-library", metavar="DIR", help="isolated fictional demo; ignores personal configuration")
+        library.add_argument("--server", metavar="URL", help="use an already-running local library, e.g. http://127.0.0.1:8767; ignores personal configuration")
         command.add_argument("--json", action="store_true", help="lossless structured output for scripts and AI; diagnostics use stderr")
         command.add_argument("--max-tokens", type=bounded_integer(512, 16384), default=4096,
                              help="approximate output budget per page, 512–16384 (default: 4096)")
@@ -970,7 +971,8 @@ def main(argv: list[str] | None = None) -> int:
     # Apply workdir from top-level flag if the subcommand supports it.
     try:
         # Demo startup bypasses both cached settings and user environment/.env.
-        isolated = args.cmd in {"demo", "setup"} or bool(getattr(args, "demo_library", None))
+        isolated = (args.cmd in {"demo", "setup"} or bool(getattr(args, "demo_library", None))
+                    or getattr(args, "server", None) is not None)
         settings = None if isolated else get_settings()
         return args.func(args, settings) or 0
     except KeyboardInterrupt:
