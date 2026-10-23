@@ -86,14 +86,14 @@ to its model provider; h/g cannot control that client's privacy policy.
 
 ## Names and saved references
 
-Current tools use `hg_*` and new resource URIs use `hg://`. Update older client
-instructions, allowlists and tool names that reference `proharness_*`; those old
-tool aliases are not the advertised API. Python imports use `hunter_gatherer`.
+Current tools use `hg_*` and resource URIs use `hg://`. Configure client
+instructions and allowlists using the advertised tool schemas and names.
+Python imports use `hunter_gatherer`.
 
 Exact saved citations such as `[mem:…]` and `[doc:…#…]` retain their identifiers.
-Compatibility readers preserve older collection markers and compact exports;
-legacy resource URIs can still identify sources. This compatibility does not
-load another application's configuration or migrate a live database.
+Supported collection and export formats preserve their source references.
+Connecting a client does not load another application's configuration or migrate
+a live database.
 
 ## Original images
 

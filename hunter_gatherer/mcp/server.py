@@ -238,18 +238,6 @@ def build_server(settings: Settings | None = None, harness=None, *, tool_profile
             call_tool(harness, "hg_memory_history", {"memory_id": memory_id})
         )
 
-    # Historical resource bookmarks keep resolving through the same access
-    # checks. New tool output and documentation use hg:// exclusively.
-    for uri, handler in (
-        ("proharness://documents/{document_id}", document_resource),
-        ("proharness://chunks/{chunk_id}", chunk_resource),
-        ("proharness://workspaces/{workspace_id}/artifacts/{artifact_id}", artifact_resource),
-        ("proharness://memories/{memory_id}/history", memory_history_resource),
-    ):
-        server.resource(uri, name="Legacy source bookmark", mime_type="application/json")(handler)
-    if "hg_task" in names:
-        server.resource("proharness://workspaces/{workspace_id}/tasks/{task_id}",
-                        name="Legacy task bookmark", mime_type="application/json")(task_resource)
     return server, harness
 
 

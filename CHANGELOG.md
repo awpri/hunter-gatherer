@@ -1,5 +1,19 @@
 # Release notes
 
+## 0.1.0a2 — consistent h/g namespaces
+
+- Use the current `hg_*` tools, `hg://` resource URIs and h/g export markers
+  throughout the package, documentation and examples.
+- Remove alternate resource, tool and serialized-format aliases. Libraries or
+  saved exports from a differently named installation require an explicit
+  migration before opening them with this version.
+- Preserve current collection revisions, record IDs, exact quotations, original
+  file hashes and source visibility checks.
+
+Install this alpha into its own environment. Existing personal libraries and
+configuration are never migrated automatically. The earlier synthetic retrieval
+evaluation remains labeled with the version it measured.
+
 ## 0.1.0a1 — first public alpha
 
 hunter/gatherer is a local evidence library with a quote-first browser interface,
@@ -32,10 +46,10 @@ configuration uses `HG_*`, and new resource URIs use `hg://`. Configured stores
 default to `~/.hunter-gatherer`. Managed `--library` workflows use their own
 manifest and ignore ambient configuration and agent skills.
 
-Existing serialized collection/evidence formats and `proharness://` source
-bookmarks remain readable. New MCP tool names replace the old public names;
-clients connecting to h/g must use the new configuration. No existing personal
-installation or database is migrated automatically.
+Collections, evidence exports and resource URIs use h/g identifiers. Exact source
+citations retain their record IDs. Clients connecting to h/g must use its current
+tool names and configuration. No existing personal installation or database is
+migrated automatically.
 
 ### Known limitations
 

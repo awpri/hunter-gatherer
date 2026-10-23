@@ -10,36 +10,21 @@ locally; no test downloads weights implicitly.
 from __future__ import annotations
 
 import os
-import pathlib
-
 import pytest
 
 from hunter_gatherer.config import Settings
 from hunter_gatherer.memory.embeddings import HashingEmbedder
 from hunter_gatherer.memory.store import MemoryStore
 
-# Repo path (the .env file lives here); tests run from a different cwd so the
-# runtime `.env` is never read by `Settings()` during the suite.
-_REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-
 @pytest.fixture(autouse=True)
 def _hermetic_settings_env(monkeypatch, tmp_path):
-    """Keep tests hermetic against the repo's runtime `.env` file.
-
-    A repo `.env` legitimately sets runtime defaults (e.g.
-    HG_LOCAL_ONLY=true, HG_SQLITE_PATH=/abs/path) for the live
-    harness. Tests should not inherit those — they construct `Settings(...)`
-    explicitly for the behavior under test. We (1) strip every harness-relevant
-    env var, and (2) chdir into a tmp dir so pydantic-settings does not find a
-    `.env` relative to cwd. Tests that exercise .env loading (test_config_env)
-    pass `_env_file` explicitly or set vars after this strip.
-    """
+    """Isolate defaults from environment overrides and personal config files."""
     for prefix in ("HG_", "OPENAI_", "ANTHROPIC_", "MESSAGES_", "QDRANT_", "LLAMA_", "SQLITE_", "LOCAL_ONLY"):
         for k in list(os.environ):
             if k.startswith(prefix):
                 monkeypatch.delenv(k, raising=False)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HG_CONFIG_FILE", str(tmp_path / "absent-config.env"))
     monkeypatch.setenv("HG_EMBED_MODEL", "hashing")
     monkeypatch.setenv("HG_VECTOR_BACKEND", "memory")
     monkeypatch.setattr("hunter_gatherer.memory.embeddings._st_available", lambda: False)

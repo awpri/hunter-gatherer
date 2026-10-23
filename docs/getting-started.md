@@ -5,14 +5,14 @@ The base package includes SQLite, text/PDF extraction, the terminal, MCP and a
 bundled web interface. It works without a model key, model server or Node.js.
 Neural embeddings, speech and OCR are optional.
 
-This guide installs **0.1.0a1**, the first public alpha, from GitHub. You need
+This guide installs **0.1.0a2**, a public alpha, from GitHub. You need
 Git and **Python 3.11 or newer**, or `uv`, which can install Python for you.
 There is no h/g PyPI package or Homebrew formula yet.
 
 ## macOS and Linux
 
 ```bash
-git clone --branch v0.1.0a1 --depth 1 https://github.com/awpri/hunter-gatherer.git
+git clone --branch v0.1.0a2 --depth 1 https://github.com/awpri/hunter-gatherer.git
 cd hunter-gatherer
 python3 -m venv .venv
 .venv/bin/python -m pip install .
@@ -24,7 +24,7 @@ python3 -m venv .venv
 ## Windows PowerShell
 
 ```powershell
-git clone --branch v0.1.0a1 --depth 1 https://github.com/awpri/hunter-gatherer.git
+git clone --branch v0.1.0a2 --depth 1 https://github.com/awpri/hunter-gatherer.git
 Set-Location hunter-gatherer
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install .
@@ -53,13 +53,13 @@ is not installed. h/g does not need a separate dependency download manager.
 
 ### From a release asset
 
-The [alpha release](https://github.com/awpri/hunter-gatherer/releases/tag/v0.1.0a1)
+The [alpha release](https://github.com/awpri/hunter-gatherer/releases/tag/v0.1.0a2)
 provides the wheel and source archive with checksums. Download the wheel, verify
 it against the release checksum list, create a dedicated virtual environment,
 then install that local file:
 
 ```bash
-.venv/bin/python -m pip install ./hunter_gatherer-0.1.0a1-py3-none-any.whl
+.venv/bin/python -m pip install ./hunter_gatherer-0.1.0a2-py3-none-any.whl
 ```
 
 Use the Windows interpreter path above when applicable. The wheel includes the
@@ -106,7 +106,7 @@ region images need:
 Windows: `.\.venv\Scripts\python.exe -m pip install ".[document-view]"`.
 With uv: `uv pip install --python .venv/bin/python '.[document-view]'`.
 From a wheel, use its local path plus the extra, such as
-`'./hunter_gatherer-0.1.0a1-py3-none-any.whl[document-view]'`.
+`'./hunter_gatherer-0.1.0a2-py3-none-any.whl[document-view]'`.
 
 | Extra | Adds |
 | --- | --- |
@@ -165,12 +165,12 @@ replace the original. Keep backups outside the library directory.
 separate demo commands ignore normal configuration. Commands using general h/g
 settings read `~/.hunter-gatherer/config.env`, or the path named by
 `HG_CONFIG_FILE`, and `HG_` environment variables. They do not automatically load
-a working-directory `.env` or `PROHARNESS_` settings. [.env.example](../.env.example)
+a working-directory `.env` or another application's settings. [.env.example](../.env.example)
 is a reference for advanced configuration, not a required setup step.
 
 The package is `hunter-gatherer`, Python imports use `hunter_gatherer`, and
 commands are `hunt`, `hunt-mcp` and `hunt-ui`. Install h/g separately from any
-existing ProHarness environment. No original database or configuration is migrated
+existing application environment. No original database or configuration is migrated
 by installation; see [compatibility and migration](roadmap.md#compatibility-and-migration).
 
 To upgrade, back up first, read the new release notes, and install that version

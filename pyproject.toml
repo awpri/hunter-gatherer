@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hunter-gatherer"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "hunter/gatherer: a local evidence library with quote-first search and a compact MCP interface."
 readme = "README.md"
 requires-python = ">=3.11"

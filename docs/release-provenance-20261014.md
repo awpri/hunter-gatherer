@@ -9,7 +9,7 @@ It contains no private corpus names, questions, conversations or credentials.
 
 - **Runtime Python:** project implementation under `hunter_gatherer`, excluding
   private development evaluation modules. The public distribution is
-  `hunter-gatherer`. Original ProHarness attribution is retained in NOTICE.
+  `hunter-gatherer`. Project copyright attribution is retained in NOTICE.
 - **Fictional demo:** purpose-written Lantern Markdown sources contain versioned
   plans, an owner correction and explicitly unknown outcomes. They do not come
   from a personal library.
@@ -38,9 +38,9 @@ The owner selected Apache License 2.0 for hunter/gatherer on 2026-10-20.
 original project and third-party attribution. This does not relicense dependencies.
 
 The public checkout, preview libraries and exported packages are separate from
-the original ProHarness installation. Its personal database, credentials and
-configuration are not release content. Compatibility preserves historical source
-identifiers and export formats; it does not authorize automatic migration.
+existing personal installations. Their databases, credentials and configuration
+are not release content. Supported exports preserve source identifiers and
+history; installation does not authorize automatic migration.
 
 ## Verification boundary
 

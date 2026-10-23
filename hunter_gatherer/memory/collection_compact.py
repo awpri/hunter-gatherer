@@ -13,7 +13,6 @@ from hunter_gatherer.memory.original_page_reference import valid_original_page_r
 from hunter_gatherer.memory.output_budget import budget_report, output_bytes, validate_budget
 
 _VERSION = "hg_collection_export_compact_v1"
-_READ_VERSIONS = (_VERSION, "proharness_collection_export_compact_v1")
 _EXPORT_FIELDS = ("collection_id", "revision", "truncated", "omitted_references", "content_policy")
 _FULL_FIELDS = {"format", "content", "unresolved", "budget", *_EXPORT_FIELDS}
 _COMPACT_FIELDS = {"format", "response_format", "content", "budget"}
@@ -100,13 +99,11 @@ def _content(content, shape):
                         or "quote" in item or item.get("availability") != "unchecked"
                         or type(followup) is not dict or set(followup) != {"tool", "arguments"}
                         or followup["tool"] not in (
-                            "hg_open", "proharness_open",
-                            "hg_get_document" if is_file else "hg_document_page_image",
-                            "proharness_get_document" if is_file else "proharness_document_page_image")
+                            "hg_open", "hg_get_document" if is_file else "hg_document_page_image")
                         or type(followup["arguments"]) is not dict):
                     raise ValueError("Invalid original file source" if is_file else "Invalid original page source")
                 arguments = followup["arguments"]
-                if followup["tool"] in ("hg_open", "proharness_open"):
+                if followup["tool"] == "hg_open":
                     if (set(arguments) != {"refs", "view", "max_tokens", "include_sensitive"}
                             or arguments["refs"] != [item["citation"]]
                             or arguments["view"] != ("outline" if is_file else "page")
@@ -173,7 +170,7 @@ def expand_collection_export(export: dict) -> dict:
         raise ValueError("Invalid compact collection content")
     marker = content.pop("compact_format", None)
     if (type(marker) is not dict or set(marker) != {"version", "shape"}
-            or marker.get("version") not in _READ_VERSIONS or marker.get("shape") not in ("collection", "minimal")):
+            or marker.get("version") != _VERSION or marker.get("shape") not in ("collection", "minimal")):
         raise ValueError("Unsupported compact collection format")
     shape = marker["shape"]
     defaults = _DEFAULTS if shape == "collection" else {"unresolved": []}

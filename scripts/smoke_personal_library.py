@@ -93,7 +93,7 @@ def main():
         allowed = {"PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL"}
         env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
         env.update(HG_SQLITE_PATH=str(sentinel), HG_EMBED_MODEL="must-not-load",
-                   PROHARNESS_SQLITE_PATH=str(sentinel), PROHARNESS_EMBED_MODEL="must-not-load",
+                   UNRELATED_SQLITE_PATH=str(sentinel), UNRELATED_EMBED_MODEL="must-not-load",
                    PYTHONNOUSERSITE="1", PYTHONIOENCODING="utf-8", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
 
         def run(arguments, *, success=True):

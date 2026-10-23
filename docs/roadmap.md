@@ -1,6 +1,6 @@
 # Direction and release scope
 
-**0.1.0a1 is a public alpha.** The library, terminal and MCP workflows are the
+**0.1.0a2 is a public alpha.** The library, terminal and MCP workflows are the
 supported focus. Proposals below are not release commitments.
 
 h/g centers on a question, its sources and a useful handoff to an AI assistant.
@@ -68,13 +68,13 @@ for Python imports, `hunt`/`hunt-mcp`/`hunt-ui` for commands, `hg_*` for MCP too
 `~/.hunter-gatherer/config.env`, or a file explicitly selected by `HG_CONFIG_FILE`.
 Directory-based library commands use their own manifest instead.
 
-Existing citation labels and source IDs stay stable. Readers recognize older
-collection workspace markers, compact export formats and resource URI aliases.
-Exact source text, hashes and histories are not renamed. Old MCP client prompts
-and tool allowlists must be updated; old tool names are not the advertised API.
+Existing citation labels and source IDs stay stable. Collection workspaces,
+compact exports and resource URIs use h/g identifiers. Exact source text, hashes
+and histories are not renamed. MCP client prompts and tool allowlists must use
+the currently advertised names.
 
-The original ProHarness installation remains separate. Installing h/g does not
-read its configuration, open its library or change clients. Personal database
+Existing installations remain separate. Installing h/g does not read another
+application's configuration, open its library or change clients. Personal database
 migration and active-client cutover are deliberately separate from this release:
 
 1. Verify a backup of the database and preserved originals.

@@ -1,4 +1,4 @@
-"""Rebranding preserves selected historical stores and exact serialized evidence."""
+"""Canonical namespaces preserve exact evidence, persistence and access boundaries."""
 from copy import deepcopy
 import asyncio
 import hashlib
@@ -20,25 +20,23 @@ from hunter_gatherer.server.routers.library_sources import CollectionInput
 from hunter_gatherer.tools.archive import _internal_followups
 
 
-def test_legacy_collection_store_reopens_without_rewriting_exact_sources(store, tmp_path, monkeypatch):
-    """A synthetic pre-rename workspace remains visible after restart, then editable."""
-    text = "ProHarness archived this exact wording: café, not a renamed quotation."
+def test_collection_store_reopens_without_rewriting_exact_sources(store, tmp_path):
+    """A persisted workspace remains visible after restart, then editable."""
+    text = "Archived exact wording: café; punctuation stays unchanged."
     source = tmp_path / "source.md"
     source.write_text(text, encoding="utf-8")
     archive = DocumentArchive(store)
-    document = archive.ingest(str(source), title="ProHarness source label")
+    document = archive.ingest(str(source), title="Synthetic source label")
     chunk_id = store._sqlite.execute("SELECT id FROM archive_chunks WHERE document_id=?",
                                     (document["document_id"],)).fetchone()[0]
     hit = archive.get_chunk(chunk_id)
-    memory = store.add(Memory(text="ProHarness was the previous name.", source="proharness://legacy-note"))
+    memory = store.add(Memory(text="The fictional reading room closes at dusk.", source="fixture:reading-room"))
     references = [{"document_id": document["document_id"], "chunk_id": chunk_id}, {"memory_id": memory.id}]
-    with monkeypatch.context() as legacy:
-        legacy.setattr(library_collections, "_MARKER", "proharness:personal-library:evidence-collections:v1")
-        saved = library_collections.save_collection(store, CollectionInput(
-            name="Historical collection", references=references, idempotency_key="before-rename"))
+    saved = library_collections.save_collection(store, CollectionInput(
+        name="Reading collection", references=references, idempotency_key="before-restart"))
     workspaces = list(store._sqlite.execute("SELECT id,data FROM coordination_objects WHERE kind='workspace'"))
     assert len(workspaces) == 1
-    assert json.loads(workspaces[0][1])["description"].startswith("proharness:")
+    assert json.loads(workspaces[0][1])["description"] == "hg:personal-library:evidence-collections:v1"
     before = {table: list(store._sqlite.execute(f"SELECT * FROM {table}")) for table in
               ("memories", "archive_documents", "archive_chunks", "coordination_objects")}
     fingerprint = store.get_meta("embedder_fingerprint")
@@ -54,8 +52,8 @@ def test_legacy_collection_store_reopens_without_rewriting_exact_sources(store, 
         for table, rows in before.items():
             assert list(reopened._sqlite.execute(f"SELECT * FROM {table}")) == rows
         updated = library_collections.save_collection(reopened, CollectionInput(
-            name="Historical collection", references=references, expected_revision=1,
-            notes="A new review.", idempotency_key="after-rename"), saved["id"])
+            name="Reading collection", references=references, expected_revision=1,
+            notes="A new review.", idempotency_key="after-restart"), saved["id"])
         assert updated["revision"] == 2 and updated["id"] == saved["id"]
         assert list(reopened._sqlite.execute("SELECT id,data FROM coordination_objects WHERE kind='workspace'")) == workspaces
         assert library_collections.get_collection(reopened, saved["id"], revision=1) == saved
@@ -70,18 +68,34 @@ def test_new_collection_uses_only_current_workspace_marker(store):
     assert data["description"] == "hg:personal-library:evidence-collections:v1"
 
 
-def test_legacy_evidence_format_expands_losslessly_and_new_output_is_branded():
+def test_collections_do_not_adopt_a_workspace_with_an_unknown_marker(store):
+    from hunter_gatherer.coordination import CoordinationStore
+
+    other = CoordinationStore(store).workspace_create(actor="personal-library",
+        name="Unrelated workspace", description="other:collections:v1",
+        idempotency_key="other-workspace")["workspace"]
+    assert library_collections.list_collections(store)["collections"] == []
+    library_collections.save_collection(store, CollectionInput(
+        name="New collection", references=[], idempotency_key="new-collection"))
+    workspaces = [json.loads(row[0]) for row in store._sqlite.execute(
+        "SELECT data FROM coordination_objects WHERE kind='workspace'")]
+    assert len(workspaces) == 2
+    assert next(item for item in workspaces if item["id"] == other["id"]) == other
+    assert sum(item["description"] == "hg:personal-library:evidence-collections:v1"
+               for item in workspaces) == 1
+
+
+def test_current_evidence_format_expands_losslessly_and_unknown_versions_are_rejected():
     citation = "[doc:" + "a" * 32 + "#" + "b" * 32 + "]"
-    original = {"supporting_passages": [{"citation": citation, "quote": "ProHarness source text.",
-        "context": "ProHarness source text.", "source_uri": "proharness://documents/" + "a" * 32,
-        "followup": {"tool": "proharness_open", "arguments": {"refs": [citation]}}}]}
+    original = {"supporting_passages": [{"citation": citation, "quote": "Unchanged source text: café.",
+        "context": "Unchanged source text: café.", "source_uri": "hg://documents/" + "a" * 32,
+        "followup": {"tool": "hg_open", "arguments": {"refs": [citation]}}}]}
     compact = compact_evidence_packet(original)
     assert compact["compact_format"]["version"] == "hg_evidence_compact_v1"
-    compact["compact_format"]["version"] = "proharness_evidence_compact_v1"
     snapshot = deepcopy(compact)
     assert expand_evidence_packet(compact) == original
     assert compact == snapshot
-    for version in ("other_evidence_compact_v1", "proharness_evidence_compact_v2", None, []):
+    for version in ("other_evidence_compact_v1", "hg_evidence_compact_v2", None, []):
         compact["compact_format"]["version"] = version
         with pytest.raises(ValueError, match="Unsupported"):
             expand_evidence_packet(compact)
@@ -94,19 +108,19 @@ def _full_collection_with_original(kind, use_open):
     citation = original_reference_citation(reference)
     is_file = kind == "original_file"
     if use_open:
-        followup = {"tool": "proharness_open", "arguments": {
+        followup = {"tool": "hg_open", "arguments": {
             "refs": [citation], "view": "outline" if is_file else "page",
             "max_tokens": 4096, "include_sensitive": False}}
     else:
-        followup = {"tool": "proharness_get_document" if is_file else "proharness_document_page_image",
+        followup = {"tool": "hg_get_document" if is_file else "hg_document_page_image",
                     "arguments": {"document_id": reference["document_id"],
                                   "max_chars" if is_file else "page": 2000 if is_file else 3}}
     item = {"kind": kind, "source_reference": reference, "expected_source_reference": deepcopy(reference),
             "citation": citation, "availability": "unchecked", "followup": followup,
-            "source_uri": "proharness://documents/" + reference["document_id"]}
+            "source_uri": "hg://documents/" + reference["document_id"]}
     metadata = {"collection_id": "historical-collection", "revision": 4,
                 "truncated": False, "omitted_references": 0, "content_policy": "Exact references only."}
-    content = {"name": "ProHarness collection", "purpose": "", "requirements": [], "evidence": [item],
+    content = {"name": "Reading collection", "purpose": "", "requirements": [], "evidence": [item],
                "voice_examples": [], "actor_notes": "", "actor_reviews": [], "unresolved": [],
                "review_policy": "User assessments only.", "export": deepcopy(metadata)}
     return budget_report({"format": "json", **metadata, "content": content, "unresolved": []}, 4096)
@@ -114,21 +128,25 @@ def _full_collection_with_original(kind, use_open):
 
 @pytest.mark.parametrize("kind", ["original_file", "original_page"])
 @pytest.mark.parametrize("use_open", [False, True])
-def test_legacy_collection_exports_preserve_original_followups_and_citations(kind, use_open):
+def test_collection_exports_preserve_original_followups_and_citations(kind, use_open):
     original = _full_collection_with_original(kind, use_open)
     compact = compact_collection_export(original)
     assert compact["content"]["compact_format"]["version"] == "hg_collection_export_compact_v1"
-    compact["content"]["compact_format"]["version"] = "proharness_collection_export_compact_v1"
-    budget_report(compact, 4096)
     snapshot = deepcopy(compact)
     assert expand_collection_export(compact) == original
     assert compact == snapshot
-    # Accepting the historical namespace does not broaden valid tools or coordinates.
+    # Original references require valid tools, exact coordinates and a known format.
     damaged = deepcopy(compact)
-    damaged["content"]["evidence"][0]["followup"]["tool"] = "proharness_run_shell"
+    damaged["content"]["evidence"][0]["followup"]["tool"] = "hg_run_shell"
     budget_report(damaged, 4096)
     with pytest.raises(ValueError, match="Invalid original"):
         expand_collection_export(damaged)
+    for version in ("other_collection_export_compact_v1", "hg_collection_export_compact_v2", None, []):
+        damaged = deepcopy(compact)
+        damaged["content"]["compact_format"]["version"] = version
+        budget_report(damaged, 4096)
+        with pytest.raises(ValueError, match="Unsupported"):
+            expand_collection_export(damaged)
     damaged = deepcopy(compact)
     damaged["content"]["evidence"][0]["source_reference"]["version"] = 99
     budget_report(damaged, 4096)
@@ -171,6 +189,23 @@ def test_default_mcp_catalog_contains_only_the_six_current_public_names(store):
                      "hg_import_documents", "hg_status"}
 
 
+@pytest.mark.parametrize("profile", ["library", "full"])
+def test_mcp_resource_catalog_uses_only_the_canonical_scheme(store, profile):
+    from hunter_gatherer.mcp.server import build_server
+    from hunter_gatherer.mcp.tools import Harness
+
+    harness = Harness(store=store, settings=store.settings,
+                      loop=SimpleNamespace(), cost=SimpleNamespace())
+    server = build_server(harness=harness, tool_profile=profile)[0]
+    templates = {str(item.uri_template) for item in asyncio.run(server.list_resource_templates())}
+    expected = {"hg://documents/{document_id}", "hg://chunks/{chunk_id}",
+                "hg://workspaces/{workspace_id}/artifacts/{artifact_id}",
+                "hg://memories/{memory_id}/history"}
+    if profile == "full":
+        expected.add("hg://workspaces/{workspace_id}/tasks/{task_id}")
+    assert templates == expected
+
+
 def _read_resource(server, uri):
     parts = asyncio.run(server.read_resource(uri))
     assert len(parts) == 1 and parts[0].mime_type == "application/json"
@@ -178,8 +213,8 @@ def _read_resource(server, uri):
 
 
 @pytest.mark.parametrize("restriction", ["private", "deleted"])
-def test_legacy_document_and_chunk_uris_share_current_visibility_checks(store, tmp_path, restriction):
-    source = tmp_path / "legacy-resource.md"
+def test_document_and_chunk_resources_enforce_visibility_without_writing(store, tmp_path, restriction):
+    source = tmp_path / "resource.md"
     text = "The fictional Snowdrop audit recorded three amber valves."
     title = "Fictional Snowdrop resource record"
     source.write_text(text, encoding="utf-8")
@@ -192,8 +227,6 @@ def test_legacy_document_and_chunk_uris_share_current_visibility_checks(store, t
     changes = store._sqlite.total_changes
     for resource_path in resource_paths:
         current = _read_resource(server, "hg://" + resource_path)
-        legacy = _read_resource(server, "proharness://" + resource_path)
-        assert current == legacy
         assert text in json.dumps(current) and document["document_id"] in json.dumps(current)
     assert store._sqlite.total_changes == changes
 
@@ -209,8 +242,6 @@ def test_legacy_document_and_chunk_uris_share_current_visibility_checks(store, t
     changes = store._sqlite.total_changes
     for resource_path in resource_paths:
         current = _read_resource(server, "hg://" + resource_path)
-        legacy = _read_resource(server, "proharness://" + resource_path)
-        assert current == legacy
         assert "Snowdrop" not in json.dumps(current)
         assert current.get("error"), "Hidden resources must report unavailable, not an empty successful source"
     assert store._sqlite.total_changes == changes

@@ -30,7 +30,7 @@ _PREFIXED = {
 
 
 @pytest.fixture
-def clean_env(monkeypatch):
+def clean_env(monkeypatch, tmp_path):
     """Strip every harness-relevant env var so tests start from defaults."""
     import os
 
@@ -38,6 +38,7 @@ def clean_env(monkeypatch):
         for k in list(os.environ):
             if k.startswith(prefix):
                 monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("HG_CONFIG_FILE", str(tmp_path / "absent-config.env"))
     return monkeypatch
 
 
@@ -79,11 +80,11 @@ def test_provider_keys_keep_conventional_names(clean_env):
     assert s.llama_base_url == "http://gpu:8080/v1"
 
 
-def test_hg_configuration_does_not_open_legacy_or_current_directory_settings(clean_env, tmp_path):
+def test_hg_configuration_ignores_unrelated_prefixes_and_current_directory_settings(clean_env, tmp_path):
     clean_env.chdir(tmp_path)
-    (tmp_path / ".env").write_text("HG_SQLITE_PATH=wrong.db\nPROHARNESS_SQLITE_PATH=old.db\n", encoding="utf-8")
-    clean_env.setenv("PROHARNESS_SQLITE_PATH", "old-library.db")
-    clean_env.setenv("PROHARNESS_VECTOR_BACKEND", "qdrant")
+    (tmp_path / ".env").write_text("HG_SQLITE_PATH=wrong.db\nUNRELATED_SQLITE_PATH=other.db\n", encoding="utf-8")
+    clean_env.setenv("UNRELATED_SQLITE_PATH", "other-library.db")
+    clean_env.setenv("UNRELATED_VECTOR_BACKEND", "qdrant")
     # An explicit empty config keeps the test independent of a user's h/g file.
     clean_env.setenv("HG_CONFIG_FILE", str(tmp_path / "absent-config.env"))
     settings = Settings()

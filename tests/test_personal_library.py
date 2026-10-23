@@ -23,9 +23,9 @@ from hunter_gatherer.optional_dependencies import OptionalDependencyError
 
 
 def test_empty_library_is_offline_and_ignores_ambient_configuration(tmp_path, monkeypatch):
-    old = tmp_path / "live-proharness.db"
+    old = tmp_path / "unrelated-live-library.db"
     old.write_bytes(b"untouched private database")
-    for prefix in ("HG", "PROHARNESS"):
+    for prefix in ("HG", "UNRELATED"):
         monkeypatch.setenv(f"{prefix}_SQLITE_PATH", str(old))
         monkeypatch.setenv(f"{prefix}_VECTOR_BACKEND", "qdrant")
         monkeypatch.setenv(f"{prefix}_EMBED_MODEL", "not-a-model")

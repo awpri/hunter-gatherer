@@ -125,7 +125,7 @@ recheck access. These controls cannot retract information already copied elsewhe
 Forgetting a memory is recoverable removal, not erasure of every historical
 record or backup. Keep and manage backups separately.
 
-## What changed from ProHarness?
+## Which names and settings does h/g use?
 
 The public namespace is now consistent:
 
@@ -137,14 +137,14 @@ The public namespace is now consistent:
 | General settings | `HG_` variables and `~/.hunter-gatherer/config.env` |
 
 `HG_CONFIG_FILE` can select another configuration file. A working-directory
-`.env`, `PROHARNESS_` settings, old auth cookies and the original live library are
-not picked up automatically. Older MCP client instructions must use the new tool
-names. Saved citation IDs, historical collections and compact exports have
-compatibility readers. See [migration boundaries](roadmap.md#compatibility-and-migration).
+`.env`, another application's settings and cookies, and an existing personal
+library are not picked up automatically. MCP client instructions must use the
+current tool names. Use an explicit, verified copy when moving an existing
+library; see [migration boundaries](roadmap.md#compatibility-and-migration).
 
 ## Is this a stable release?
 
-**0.1.0a1 is a public alpha**, distributed through GitHub release assets and a
+**0.1.0a2 is a public alpha**, distributed through GitHub release assets and a
 versioned source tag. There is no PyPI or Homebrew release yet. Check the exact
 release's notes and [packaged-install CI](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml).
 Tests cover a defined source boundary and synthetic workflows; they do not

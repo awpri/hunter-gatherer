@@ -4,7 +4,7 @@ This guide describes the reproducible source and package boundary for the
 hunter/gatherer public alpha. For installation and normal use, start with
 [Get started](getting-started.md).
 
-The release is `0.1.0a1`, tagged `v0.1.0a1`. It includes the local library, bundled
+The release is `0.1.0a2`, tagged `v0.1.0a2`. It includes the local library, bundled
 interface, terminal and MCP workflow. The inherited agent/audio runtime remains
 available for advanced use but is not the default alpha experience.
 
@@ -60,7 +60,7 @@ checkout. Example, continuing from the previous commands:
 
 ```bash
 python3 -m venv ../hg-check-env
-../hg-check-env/bin/python -m pip install '../hg-release-dist/hunter_gatherer-0.1.0a1-py3-none-any.whl[dev,document-view]'
+../hg-check-env/bin/python -m pip install '../hg-release-dist/hunter_gatherer-0.1.0a2-py3-none-any.whl[dev,document-view]'
 cd ..
 hg-check-env/bin/python -m pytest -q public-candidate/tests
 hg-check-env/bin/python -I -B public-candidate/scripts/smoke_packaged_demo.py --require-lean --output packaged-demo.json
@@ -104,9 +104,9 @@ Automation cannot establish that every visual interaction is usable.
 
 - New tools/resources use `hg_*` and `hg://`; clients must update old tool names.
 - Existing bracket citations retain their IDs and source versions.
-- Readers accept older collection markers and compact formats without changing
-  source text, hashes, reference identities or recorded followups.
-- `HG_` settings and h/g's config directory remain separate from ProHarness.
+- Supported collection and compact formats preserve source text, hashes,
+  reference identities and recorded followups.
+- `HG_` settings and h/g's config directory remain separate from other applications.
 - The real-library launcher uses its explicit manifest, not ambient provider
   credentials or another installation's database.
 - Backup/restore uses a new destination and preserves the selected model identity.
@@ -130,6 +130,8 @@ release downloads, documentation links and fresh installation after publishing.
 ## License
 
 Project source is licensed under [Apache License 2.0](../LICENSE).
-[NOTICE](../NOTICE) retains original ProHarness and bundled third-party
-attribution. Dependency and asset licenses retain their own terms. The original
-ProHarness installation and live personal library are separate from this release.
+[NOTICE](../NOTICE) contains the project copyright and license notice, plus
+bundled third-party attribution. The standard appendix in LICENSE remains a
+template; project-specific identifying information belongs in the project notice.
+Dependency and asset licenses retain their own terms. Existing installations and
+personal libraries are separate from this release.

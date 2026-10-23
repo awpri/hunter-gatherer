@@ -27,10 +27,6 @@ from hunter_gatherer.memory.source_metadata import memory_source_descriptor
 from hunter_gatherer.memory.workspace_scope import scope_visible
 
 _MARKER = "hg:personal-library:evidence-collections:v1"
-# Existing collections retain their immutable workspace and retry receipts.
-# Accept the previous marker when reading an explicitly selected older store;
-# new stores use only the current marker and never discover another database.
-_MARKERS = (_MARKER, "proharness:personal-library:evidence-collections:v1")
 _ACTOR = "personal-library"
 
 
@@ -105,7 +101,7 @@ def _workspace(coordination, create=False):
         except (ValueError, TypeError):
             continue
         if (isinstance(value, dict) and value.get("id") == row[0]
-                and value.get("description") in _MARKERS and value.get("actor") == _ACTOR):
+                and value.get("description") == _MARKER and value.get("actor") == _ACTOR):
             return row[0]
     if create:
         return coordination.workspace_create(actor=_ACTOR, name="Personal library collections",

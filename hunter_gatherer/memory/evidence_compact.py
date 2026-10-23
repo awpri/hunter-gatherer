@@ -11,7 +11,6 @@ _CONTENT = ('quote', 'location', 'context', 'context_location')
 _ATTRIBUTION = ('document_id', 'chunk_id', 'title', 'author', 'document_date',
                 'version', 'is_latest', 'latest_version', 'warnings', 'sensitive', 'source_uri')
 _FORMAT = 'hg_evidence_compact_v1'
-_READ_FORMATS = (_FORMAT, 'proharness_evidence_compact_v1')
 _CONTRACT = (
     'Content occurrences reference content_registry by exact citation. Restore only '
     'the fields named by content_fields. For context_encoding=quote, context is quote; '
@@ -115,7 +114,7 @@ def compact_evidence_packet(packet: dict) -> dict:
 def expand_evidence_packet(packet: dict) -> dict:
     """Reconstruct the original packet for adapters and losslessness checks."""
     if (not isinstance(packet, dict) or not isinstance(packet.get('compact_format'), dict)
-            or packet['compact_format'].get('version') not in _READ_FORMATS):
+            or packet['compact_format'].get('version') != _FORMAT):
         raise ValueError('Unsupported compact evidence format')
     result = deepcopy(packet)
     registry = result.pop('content_registry', None)

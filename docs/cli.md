@@ -137,11 +137,11 @@ These selection flags are mutually exclusive. Prefer `--library` or `--server`
 for personal libraries. Directory-based and demo workflows ignore ambient
 configuration. General settings use `HG_` variables and
 `~/.hunter-gatherer/config.env` or `HG_CONFIG_FILE`; there is no implicit
-working-directory `.env` or ProHarness configuration loading.
+working-directory `.env` or another application's configuration loading.
 
 Open reads without writing. Direct local Ask initializes the selected store and
-may update its schema, indexes or caches. Do not point it at a live ProHarness
-database as a migration shortcut; first verify a separate backup/copy.
+may update its schema, indexes or caches. When migrating an existing database,
+first verify a separate backup/copy instead of opening the active database.
 
 `--include-sensitive` includes sensitive records on that invocation only. Choose
 an output destination appropriate for those records.
