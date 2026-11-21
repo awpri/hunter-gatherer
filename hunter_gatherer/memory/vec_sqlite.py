@@ -23,6 +23,10 @@ from hunter_gatherer.memory.store import VectorBackend, VectorSearchHit
 class SqliteVecBackend(VectorBackend):
     """Dense vectors in sqlite-vec, payloads joined from the memories table."""
 
+    # Vectors share the store's connection, so the store writes them in the
+    # same transaction as the record. Every process sees the same index.
+    transactional = True
+
     def __init__(self, store, embedder: Embedder, *, dim: int, initialize: bool = True):
         import sqlite_vec  # optional dep; ImportError propagates to the fallback
 
@@ -49,6 +53,9 @@ class SqliteVecBackend(VectorBackend):
     def delete(self, ids: list[str]) -> None:
         with self._store._lock, self._lock:
             self._store.vec_delete(ids)
+
+    def refresh_payload(self, memories: list[Memory]) -> None:
+        """Payloads are read from the memories table at search time."""
 
     def search_dense(self, query_dense, query_text, top_k, filters=None) -> list[VectorSearchHit]:
         k = int(top_k)

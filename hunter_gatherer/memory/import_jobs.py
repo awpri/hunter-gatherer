@@ -70,8 +70,13 @@ class ImportJobs:
                 p.is_symlink() or p.name.startswith(".") for p in (path, *path.parents) if p.name
             )
 
+        from hunter_gatherer.access import current_policy
+
+        policy = current_policy()
         for value in paths:
             path = Path(os.path.abspath(Path(value).expanduser()))
+            # A hosted caller may only name files below the folders its host allows.
+            policy.check_import_path(path)
             if not safe(path):
                 skipped += 1
                 continue

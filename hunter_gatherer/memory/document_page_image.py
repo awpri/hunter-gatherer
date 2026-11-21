@@ -196,7 +196,9 @@ def _validated_result(result, page, max_side, *, fit_to_byte_limit=False):
         rotation = render.get("intrinsic_rotation_degrees")
         if (any(type(render.get(key)) is not type(value) or render[key] != value for key, value in constants.items())
             or type(rotation) is not int or rotation not in (0, 90, 180, 270)
-            or any(not isinstance(render.get(key), str) or not re.fullmatch(r"[A-Za-z0-9.+_-]{1,100}", render[key]) for key in versions)):
+            # Build labels such as "159.0.8149.0@sourcebuild" are ordinary;
+            # the bound is only that these are short, plain version strings.
+            or any(not isinstance(render.get(key), str) or not re.fullmatch(r"[A-Za-z0-9.+_@-]{1,100}", render[key]) for key in versions)):
             return error("render_failed", "Renderer returned invalid fitting metadata; no image returned.", 422)
         result["render"] = {**constants, **{key: render[key] for key in versions}, "scale": scale,
                             "intrinsic_rotation_degrees": rotation, **fitting}

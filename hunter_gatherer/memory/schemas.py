@@ -8,12 +8,61 @@ We follow the cognitive-science taxonomy used by MemGPT/Letta/Mem0:
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Literal
 
 MemoryType = Literal["semantic", "episodic", "procedural"]
+
+# Metadata that only tightens. A writer that never saw these flags must not be
+# able to drop them, and a correction must not be more visible than its source.
+PROTECTIVE_FLAGS = ("sensitive", "private", "excluded", "application_excluded")
+
+_CONFLICT_MESSAGES = {
+    "missing": "Active memory not found",
+    "deleted": "Active memory not found: it was forgotten after it was read",
+    "superseded": "Active memory not found: it was already replaced by a newer correction",
+    "changed": "Memory changed after it was read; read it again before writing",
+}
+
+
+class MemoryConflictError(ValueError):
+    """A memory write was refused instead of overwriting a newer decision.
+
+    ``reason`` is ``missing`` (no such record), ``deleted`` (forgotten),
+    ``superseded`` (already replaced by a correction) or ``changed`` (edited
+    since the writer read it). ``current_id`` names the active record at the
+    head of a replacement chain when one exists. Nothing was written.
+
+    This subclasses ValueError so callers that already report invalid requests
+    keep working; callers that can reconcile should inspect ``reason``.
+    """
+
+    def __init__(self, memory_id: str, reason: str, *, current_id: str | None = None,
+                 message: str | None = None):
+        if reason not in _CONFLICT_MESSAGES:
+            raise ValueError(f"Unknown memory conflict reason: {reason!r}")
+        self.memory_id = memory_id
+        self.reason = reason
+        self.current_id = current_id
+        super().__init__(message or _CONFLICT_MESSAGES[reason])
+
+
+def stored_token(row: tuple) -> str:
+    """Digest of the persisted fields that define a record's content and state.
+
+    Access counters are excluded so reading a memory never looks like an edit.
+    Tokens are always computed from values read back from SQLite, so both sides
+    of a comparison share one serialization.
+    """
+    row = tuple(row)
+    deleted_at = row[10] if len(row) > 10 else None
+    payload = json.dumps([row[1], row[2], row[3], row[4], row[8], row[9], deleted_at],
+                         separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8", "surrogatepass")).hexdigest()
 
 
 @dataclass
@@ -83,6 +132,29 @@ class Memory:
             return False
         return matches_filters(self.to_payload(), filters or {})
 
+    # ── what this reader saw ─────────────────────────────────────────────────
+    @property
+    def _stored_token(self) -> str | None:
+        """Digest of the stored row this record was read from.
+
+        The store compares it with the current row before accepting a write,
+        so a stale snapshot cannot undo a newer forget, correction or privacy
+        change. A copy made by hand has none and is treated as unread.
+
+        Reading keeps the row and hashes nothing: a search turns every record
+        into an object and writes none of them. The digest is worked out the
+        first time a write asks, from the row as it was read, so edits made to
+        this object since then do not change what it claims to have seen.
+        """
+        seen = self.__dict__.get("_seen")
+        if type(seen) is tuple:
+            seen = self.__dict__["_seen"] = stored_token(seen)
+        return seen
+
+    @_stored_token.setter
+    def _stored_token(self, token: str | None) -> None:
+        self.__dict__["_seen"] = token
+
     # ── payload that gets stored alongside the vector in Qdrant ──────────────
     def to_payload(self) -> dict:
         """Small, indexable payload stored with the vector. Keeps the heavy
@@ -137,7 +209,7 @@ class Memory:
             source,
             metadata_json,
         ) = row[:10]
-        return cls(
+        memory = cls(
             id=id_,
             text=text,
             type=type_,
@@ -150,6 +222,11 @@ class Memory:
             metadata=json.loads(metadata_json) if metadata_json else {},
             deleted_at=deleted_at,
         )
+        # What this reader saw, kept as read. ``_stored_token`` turns it into a
+        # digest only if a write needs one. Not a dataclass field: copies made
+        # by hand carry nothing and are treated as unread.
+        memory._seen = row
+        return memory
 
 
 def matches_filters(payload: dict, filters: dict) -> bool:
@@ -192,3 +269,4 @@ class ConsolidationDecision:
     op: Literal["ADD", "UPDATE", "DELETE", "NOOP"]
     target_id: str | None = None  # existing memory touched, if any
     reason: str = ""
+    target_token: str | None = field(default=None, repr=False)  # stored row used by the judge

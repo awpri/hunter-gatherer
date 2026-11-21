@@ -17,6 +17,9 @@ their supported entry points.
 
 The local application is not a multi-tenant hosted service. Deploying it on an
 untrusted network requires a separately designed authentication and access boundary.
+A hosting application can pass that boundary's decisions to h/g as an access
+policy ([hosting contract](docs/hosting.md)). The policy limits what a call may
+do; it does not authenticate anyone or protect the transport.
 
 ## Trust boundaries
 
@@ -30,6 +33,11 @@ is not an authorization mechanism.
 
 - Read, export, copy and source-opening operations must enforce current access and
   privacy rules, including linked records, cached results and collections.
+- A host-supplied access policy must hold for every tool action whatever the tool
+  arguments say. Arguments, actor or workspace labels, tool profiles and
+  `include_sensitive` must never widen it or select another library.
+- A write based on an outdated read must be refused rather than undo a newer
+  forget, correction or privacy change.
 - Document handling must respect permitted paths, reject traversal and unsafe
   symlink or reparse-point resolution, and bound parsing and rendering work.
 - The documented local web surface must enforce its intended host/origin boundary.

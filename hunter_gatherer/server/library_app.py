@@ -7,6 +7,7 @@ not create another store or embedding model.
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
@@ -97,7 +98,31 @@ def build_library_app(harness, mcp_server, *, http_options: dict, static_dir: Pa
         lifespan=lifespan,
     )
     app.state.library_harness = harness
-    app.include_router(router, prefix="/api/library")
+
+    @app.exception_handler(sqlite3.OperationalError)
+    async def busy_library(_request: Request, exc: sqlite3.OperationalError):
+        from hunter_gatherer.mcp.tools import library_busy
+
+        if not library_busy(exc):
+            raise exc
+        # Another process kept the database file for longer than a request waits.
+        return JSONResponse({"detail": "The library is busy with another client's work. Try again in a moment.",
+                             "error_code": "library_busy"}, status_code=503, headers={"Retry-After": "1"})
+
+    def unrestricted_only():
+        # This API is the owner's own browser interface. It takes its privacy
+        # choices from request parameters, so it is not offered to callers a
+        # host has restricted; they use the MCP endpoint built for their role.
+        from fastapi import HTTPException
+
+        from hunter_gatherer.access import effective_policy
+
+        if not effective_policy(harness).unrestricted:
+            raise HTTPException(403, "The local library API is not available to a restricted connection.")
+
+    from fastapi import Depends
+
+    app.include_router(router, prefix="/api/library", dependencies=[Depends(unrestricted_only)])
     # Keep the SDK endpoint at exactly /mcp; mounting would rewrite its path.
     app.router.routes.append(Route("/mcp", endpoint=mcp_app.router.routes[0].endpoint))
     app.router.routes.append(Route("/mcp/library", endpoint=library_mcp_app.router.routes[0].endpoint))

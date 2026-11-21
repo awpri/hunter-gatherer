@@ -3,7 +3,7 @@
 **Your data, AI-native.** Ask your library. Inspect the evidence. Give your assistant the sources.
 
 [![Packaged install checks](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml/badge.svg?branch=main)](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml)
-[![Public alpha](https://img.shields.io/badge/release-0.1.0a2-orange.svg)](https://github.com/awpri/hunter-gatherer/releases/tag/v0.1.0a2)
+[![Public alpha](https://img.shields.io/badge/release-0.1.0a3-orange.svg)](https://github.com/awpri/hunter-gatherer/releases/tag/v0.1.0a3)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 [![MCP: six tool families](https://img.shields.io/badge/MCP-6_tool_families-9b8ec4.svg)](docs/mcp.md)
@@ -41,7 +41,7 @@ You need **Python 3.11 or newer** and Git. The bundled interface runs without No
 Install the tagged alpha in its own environment:
 
 ```bash
-git clone --branch v0.1.0a2 --depth 1 https://github.com/awpri/hunter-gatherer.git
+git clone --branch v0.1.0a3 --depth 1 https://github.com/awpri/hunter-gatherer.git
 cd hunter-gatherer
 python3 -m venv .venv
 .venv/bin/python -m pip install .
@@ -88,7 +88,7 @@ The [Lantern demo](docs/demo.md) is entirely fictional and has its own database.
 Copy this prompt into an assistant with terminal access:
 
 ```text
-Install hunter/gatherer v0.1.0a2 from https://github.com/awpri/hunter-gatherer
+Install hunter/gatherer v0.1.0a3 from https://github.com/awpri/hunter-gatherer
 using that tag's README and docs/getting-started.md. Check my OS, Git and Python
 first. Use a new checkout and dedicated .venv; prefer uv if already installed,
 otherwise use Python 3.11+ and pip inside that environment. Install the base
@@ -111,6 +111,8 @@ downloading model weights or changing existing configuration.
 - [Using the library](docs/usage.md) — Ask, graph exploration, citations and collections.
 - [Terminal usage](docs/cli.md) — library selection, imports, source inspection and JSON.
 - [MCP integration](docs/mcp.md) — connect an assistant through the six-tool interface.
+- [Several assistants, one library](docs/concurrency.md) — what happens when clients write at once.
+- [Hosting](docs/hosting.md) — put your own sign-in in front and limit what each caller may do.
 - [Questions and feature scope](docs/faq.md) — search, privacy, writing examples and optional AI components.
 - [Roadmap](docs/roadmap.md) — priorities and deferred features.
 - [Release verification](docs/public-release-guide.md) — packaging and the source export boundary.

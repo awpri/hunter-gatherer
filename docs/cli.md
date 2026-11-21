@@ -146,6 +146,21 @@ first verify a separate backup/copy instead of opening the active database.
 `--include-sensitive` includes sensitive records on that invocation only. Choose
 an output destination appropriate for those records.
 
+## Several processes on one library
+
+A browser server, a terminal command and an assistant's own `hunt-mcp` process
+can all have the same library open. Writers take turns. On a recognized local
+disk a reader can continue searching while another client commits a write.
+h/g chooses the SQLite journal mode when it opens the library.
+
+```bash
+hunt storage ./my-library
+```
+
+This shows which way the file is shared and why, and warns if the folder is a
+risky home for a live library. It changes nothing. `--json` prints the report
+for scripts. See [Several assistants, one library](concurrency.md).
+
 ## Backup and recovery
 
 ```bash

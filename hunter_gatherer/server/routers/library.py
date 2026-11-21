@@ -40,6 +40,7 @@ from hunter_gatherer.memory.library_board import (
 )
 from hunter_gatherer.memory.library_groups import build_library_groups, group_assignments
 from hunter_gatherer.memory.library_health import _read_snapshot
+from hunter_gatherer.memory.retrieval_feedback import current_memory
 from hunter_gatherer.memory.schemas import Memory
 
 router = APIRouter()
@@ -427,23 +428,24 @@ def pin(request: Request, memory_id: str, body: PinInput):
 @router.post("/memories/{memory_id}/replace")
 def replace(request: Request, memory_id: str, body: ReplaceInput):
     harness = _harness(request)
-    with harness.store._lock:
-        _require_memory(harness, memory_id, body.include_sensitive)
-        old = harness.store.get(memory_id)
-        candidate = Memory(text=body.text, tags=old.tags, metadata=old.metadata)
-        if not body.include_sensitive and is_sensitive_memory(candidate, harness.store):
-            raise HTTPException(422, "This correction requires include_sensitive=true for private content.")
-        result = _call(tools.replace_memory, harness, memory_id, body.text)
-        result["memory"] = _record(harness, harness.store.get(result["memory"]["id"]), body.include_sensitive)
-        return result
+    with _read_snapshot(harness.store):
+        old = current_memory(harness.store, memory_id, body.include_sensitive, include_superseded=True)
+        if old is not None and not body.include_sensitive:
+            candidate = Memory(text=body.text, tags=old.tags, metadata=old.metadata)
+            if is_sensitive_memory(candidate, harness.store):
+                raise HTTPException(422, "This correction requires include_sensitive=true for private content.")
+    result = _call(tools.replace_memory, harness, memory_id, body.text, include_sensitive=body.include_sensitive)
+    if result.get("memory"):
+        with _read_snapshot(harness.store):
+            current = current_memory(harness.store, result["memory"]["id"], body.include_sensitive)
+            result["memory"] = _record(harness, current, body.include_sensitive) if current else None
+    return result
 
 
 @router.post("/memories/{memory_id}/forget")
 def forget(request: Request, memory_id: str, body: PrivateInput):
     harness = _harness(request)
-    with harness.store._lock:
-        _require_memory(harness, memory_id, body.include_sensitive)
-        return _call(tools.forget, harness, memory_id=memory_id)
+    return _call(tools.forget, harness, memory_id=memory_id, include_sensitive=body.include_sensitive)
 
 
 @router.get("/documents")

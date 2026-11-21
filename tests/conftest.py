@@ -16,9 +16,22 @@ from hunter_gatherer.config import Settings
 from hunter_gatherer.memory.embeddings import HashingEmbedder
 from hunter_gatherer.memory.store import MemoryStore
 
+# A store chooses its journal mode from where its file lives, so on a local
+# disk these tests exercise the write-ahead log. To run the whole suite with
+# the rollback journal instead, as on a synchronized folder:
+#     HG_TEST_STORAGE_LOCATION=synced pytest
+# Read once here, because every test starts by clearing HG_ variables.
+_FORCED_LOCATION = os.environ.get("HG_TEST_STORAGE_LOCATION")
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_settings_env(monkeypatch, tmp_path):
     """Isolate defaults from environment overrides and personal config files."""
+    if _FORCED_LOCATION:
+        from hunter_gatherer import storage
+
+        monkeypatch.setattr(storage, "classify",
+                            lambda path: storage.Location(_FORCED_LOCATION, "chosen for this test run"))
     for prefix in ("HG_", "OPENAI_", "ANTHROPIC_", "MESSAGES_", "QDRANT_", "LLAMA_", "SQLITE_", "LOCAL_ONLY"):
         for k in list(os.environ):
             if k.startswith(prefix):

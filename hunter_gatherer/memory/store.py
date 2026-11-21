@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -33,9 +34,17 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 
+from hunter_gatherer import storage
 from hunter_gatherer.config import Settings
 from hunter_gatherer.memory.embeddings import Embedder, get_embedder
-from hunter_gatherer.memory.schemas import Memory, MemoryType, matches_filters
+from hunter_gatherer.memory.schemas import (
+    PROTECTIVE_FLAGS,
+    Memory,
+    MemoryConflictError,
+    MemoryType,
+    matches_filters,
+    stored_token,
+)
 from hunter_gatherer.optional_dependencies import OptionalDependencyError
 
 log = logging.getLogger(__name__)
@@ -56,6 +65,14 @@ CREATE TABLE IF NOT EXISTS memories (
 CREATE INDEX IF NOT EXISTS idx_memories_type        ON memories(type);
 CREATE INDEX IF NOT EXISTS idx_memories_created_at  ON memories(created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_importance  ON memories(importance);
+
+-- Outstanding deliveries and persistent backends used by this library. A row
+-- change and its delivery ticket commit together, even if the process stops.
+CREATE TABLE IF NOT EXISTS memory_index_destinations (backend TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS memory_index_work (
+    backend TEXT NOT NULL, id TEXT NOT NULL, needs_vector INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (backend, id)
+) WITHOUT ROWID;
 
 -- Router outcome-feedback log (idea #1). One row per turn; outcome is the
 -- cheap loop-derived signal (good/revised/max_steps/repeat), not LLM
@@ -209,6 +226,104 @@ class VectorDimensionMismatchError(RuntimeError):
     """The persisted SQLite vector schema needs an explicit migration."""
 
 
+# How long one call waits for another process to finish with the database file
+# before giving up (reported to clients as error_code library_busy). SQLite's
+# own default is five seconds.
+LOCK_WAIT_SECONDS = 30.0
+# After its own writes a store folds the write-ahead log into the database file
+# at once. Otherwise it looks for another process's leftovers this often, and
+# after finding the file in use it waits this long before trying again.
+_FOLD_CHECK_SECONDS = 0.25
+_FOLD_RETRY_SECONDS = 0.05
+_JOURNAL_RETRY_SECONDS = 60.0
+
+
+class StoreLock:
+    """The store's re-entrant lock, with three things a plain RLock cannot do.
+
+    ``depth`` says how many times the current owner holds it, which separates
+    "a caller further up this thread's stack opened that transaction" from
+    "nobody holding the lock owns it".
+
+    Waiting is timed, so status can report contention between clients without
+    recording what they were doing.
+
+    And a transaction that was opened while the lock was held never outlives
+    the hold. Normally its owner has already committed or rolled back. If a
+    statement failed before the owner could, the leftover is rolled back as the
+    lock is released; if the owner simply returned, it is committed. Either
+    way the shared connection is clean for the next client, instead of quietly
+    collecting later writes into a transaction nobody will finish. A
+    transaction a caller opened *before* taking the lock is the caller's own
+    and is left exactly as it was.
+    """
+
+    def __init__(self, connection=None):
+        self._lock = threading.RLock()
+        self._connection = connection
+        self._entered_in_transaction = False
+        # Called just before the outermost hold ends, while the connection is
+        # still this thread's alone. It must not raise.
+        self.before_release = None
+        self.depth = 0  # only changed, and only meaningful, while held
+        self.acquisitions = self.contended = self.settled = 0
+        self.wait_total = self.wait_max = 0.0
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        if self._lock.acquire(False):
+            waited = None
+        elif not blocking:
+            return False
+        else:
+            started = time.perf_counter()
+            if not self._lock.acquire(True, timeout):
+                return False
+            waited = time.perf_counter() - started
+        self.depth += 1
+        if self.depth == 1:
+            self.acquisitions += 1
+            if waited is not None:
+                self.contended += 1
+                self.wait_total += waited
+                self.wait_max = max(self.wait_max, waited)
+            if self._connection is not None:
+                with suppress(sqlite3.Error):
+                    self._entered_in_transaction = self._connection.in_transaction
+        return True
+
+    def release(self, *, failed: bool = False) -> None:
+        try:
+            if self.depth == 1 and self._connection is not None and not self._entered_in_transaction:
+                # Closed connections and a busy database are left as they are.
+                with suppress(sqlite3.Error):
+                    if self._connection.in_transaction:
+                        self.settled += 1
+                        if failed:
+                            self._connection.rollback()
+                        else:
+                            self._connection.commit()
+            if self.depth == 1 and self.before_release is not None:
+                # Upkeep only. Whatever goes wrong in it, the hold still ends
+                # and the caller's own result or error is what they see.
+                with suppress(Exception):
+                    self.before_release()
+        finally:
+            self.depth -= 1
+            self._lock.release()
+
+    def __enter__(self) -> bool:
+        return self.acquire()
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.release(failed=exc_type is not None)
+
+    def snapshot(self) -> dict:
+        return {"acquisitions": self.acquisitions, "waited": self.contended,
+                "wait_ms_total": round(self.wait_total * 1000, 1),
+                "wait_ms_max": round(self.wait_max * 1000, 1),
+                "unfinished_transactions_settled": self.settled}
+
+
 @dataclass
 class VectorSearchHit:
     id: str
@@ -218,6 +333,10 @@ class VectorSearchHit:
 
 class VectorBackend:
     """Abstract vector backend. QdrantBackend and InMemoryBackend implement it."""
+
+    # True when vectors live in the store's own SQLite connection, so they can
+    # be written in the same transaction as the record they index.
+    transactional = False
 
     def upsert(self, memories: list[Memory], dense_vecs: list[list[float]]) -> None: ...
 
@@ -245,46 +364,72 @@ class InMemoryBackend(VectorBackend):
         self._embedder = embedder
         self._ids: list[str] = []
         self._vecs: list[list[float]] = []
+        self._norms: list[float] = []
+        self._position: dict[str, int] = {}
         self._payloads: dict[str, dict] = {}
+        # Digest of the text each vector was computed from. Lets the store
+        # notice records another process added, edited or forgot.
+        self._digests: dict[str, bytes] = {}
         self._lock = threading.Lock()
+
+    @staticmethod
+    def text_digest(text: str) -> bytes:
+        import hashlib
+
+        return hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=8).digest()
 
     def upsert(self, memories: list[Memory], dense_vecs: list[list[float]]) -> None:
         with self._lock:
             for m, v in zip(memories, dense_vecs, strict=True):
-                if m.id in self._payloads:
-                    # replace existing
-                    try:
-                        i = self._ids.index(m.id)
-                        self._vecs[i] = v
-                    except ValueError:
-                        self._ids.append(m.id)
-                        self._vecs.append(v)
-                else:
+                position = self._position.get(m.id)
+                if position is None:
+                    self._position[m.id] = len(self._ids)
                     self._ids.append(m.id)
                     self._vecs.append(v)
+                    self._norms.append(_norm(v))
+                else:
+                    self._vecs[position] = v
+                    self._norms[position] = _norm(v)
                 self._payloads[m.id] = m.to_payload()
+                self._digests[m.id] = self.text_digest(m.text)
+
+    def refresh_payload(self, memories: list[Memory]) -> None:
+        """Update filterable fields of already indexed records without embedding."""
+        with self._lock:
+            for m in memories:
+                if m.id in self._position:
+                    self._payloads[m.id] = m.to_payload()
+
+    def digests(self) -> dict[str, bytes]:
+        with self._lock:
+            return dict(self._digests)
 
     def search(self, query_dense, query_text, top_k, filters=None):
         with self._lock:
             scored = []
             qnorm = _norm(query_dense)
-            for mid, vec in zip(self._ids, self._vecs, strict=True):
+            for mid, vec, norm in zip(self._ids, self._vecs, self._norms, strict=True):
                 payload = self._payloads[mid]
                 if filters and not _matches(payload, filters):
                     continue
-                score = _dot(query_dense, vec) / (qnorm * _norm(vec) + 1e-9)
+                score = _dot(query_dense, vec) / (qnorm * norm + 1e-9)
                 scored.append(VectorSearchHit(id=mid, score=score, payload=payload))
             scored.sort(key=lambda h: -h.score)
             return scored[:top_k]
 
     def delete(self, ids):
         with self._lock:
-            idset = set(ids)
-            keep = [(i, v) for i, v in zip(self._ids, self._vecs, strict=True) if i not in idset]
-            self._ids = [i for i, _ in keep]
-            self._vecs = [v for _, v in keep]
+            idset = set(ids) & self._position.keys()
+            if not idset:
+                return
+            keep = [i for i, mid in enumerate(self._ids) if mid not in idset]
+            self._ids = [self._ids[i] for i in keep]
+            self._vecs = [self._vecs[i] for i in keep]
+            self._norms = [self._norms[i] for i in keep]
+            self._position = {mid: i for i, mid in enumerate(self._ids)}
             for i in idset:
                 self._payloads.pop(i, None)
+                self._digests.pop(i, None)
 
     def count(self):
         return len(self._ids)
@@ -429,6 +574,12 @@ class QdrantBackend(VectorBackend):
             for p in result.points
         ]
 
+    def refresh_payload(self, memories):
+        """Update filterable fields without sending the text or vectors again."""
+        for m in memories:
+            self._client.set_payload(collection_name=self._collection, payload=m.to_payload(),
+                                     points=[m.id], wait=True)
+
     def delete(self, ids):
         # Qdrant needs UUIDs or unsigned ints for point ids; we use UUID strings.
         try:
@@ -481,12 +632,36 @@ class MemoryStore:
         if settings.vector_backend == "qdrant":
             _qdrant_modules()
         self.importance_scorer = importance_scorer
-        self._sqlite = sqlite3.connect(settings.sqlite_uri(), uri=True, check_same_thread=False)
+        # One connection serves every thread of this process. sqlite3 keeps a
+        # cache of prepared statements per connection, and two threads running
+        # the same SQL then share one statement: on current Python versions a
+        # read can come back with another thread's row or with empty columns.
+        # Without the cache each execute prepares its own statement.
+        self._sqlite = sqlite3.connect(settings.sqlite_uri(), uri=True, check_same_thread=False,
+                                       cached_statements=0, timeout=LOCK_WAIT_SECONDS)
         self._sqlite.row_factory = sqlite3.Row
-        self._lock = threading.RLock()
+        self._lock = StoreLock(self._sqlite)
+        self._write_depth = 0     # write_transaction scopes open on the owning thread
+        self._snapshot_depth = 0  # read snapshots that opened their own transaction
         # Touch buffer: recall() defers last_accessed/access_count bumps off the
         # hot path (idea #3). Cleared by flush_touches(), called once per turn.
         self._touch_buffer: set[str] = set()
+        self._has_deleted_at = False
+        # Other processes can write this database. The process-local vector
+        # index notes the database version it last matched (see
+        # _refresh_index_from_other_writers), and records whose vectors could
+        # not be written wait here for reconcile_index().
+        self._index_data_version: int | None = None
+        self._index_retry_at = 0.0  # monotonic time before which a failed repair is not retried
+        # Counts only: never IDs, text or queries.
+        self._write_stats = {"conflicts": {}, "index_failures": 0, "index_refreshes": 0,
+                             "index_refreshed_records": 0, "log_folds": 0, "log_folds_deferred": 0}
+        self._stats_lock = threading.Lock()
+        try:
+            self._settle_storage()
+        except BaseException:
+            self._sqlite.close()
+            raise
         self._sqlite.executescript(_SCHEMA)
         self._sqlite.commit()
         self._ensure_deleted_at_column()  # tombstone migration for pre-existing DBs
@@ -510,11 +685,108 @@ class MemoryStore:
                     self._backend = InMemoryBackend(self.embedder)
             else:
                 self._backend = self._init_backend()
+                self._register_index()
                 self._warm_cache()
+                self._repair_index_at_open()
             self.assert_embedder_current()
         except Exception:
             self._sqlite.close()
             raise
+
+    # ── where the file lives, and how it is shared ───────────────────────────
+    def _settle_storage(self) -> None:
+        """Put the database in the journal mode that is safe where it lives.
+
+        There is nothing for a person to choose. A store on a local disk uses
+        the write-ahead log, so readers and a writer in different processes do
+        not wait for each other; anywhere else it uses the rollback journal.
+        The mode is recorded in the file, so it is checked at every opening: a
+        library that has been moved is switched as soon as nothing else has it
+        open.
+        """
+        database = self._sqlite.execute("PRAGMA database_list").fetchone()[2]
+        self._journal_preference = getattr(self.settings, "sqlite_journal", "auto")
+        self._location = storage.classify(os.path.dirname(database))
+        self._journal_wanted = storage.preferred_journal(self._location, self._journal_preference)
+        mode = storage.switch_journal(self._sqlite, self._journal_wanted)
+        storage.refuse_if_unsafe(self._location, mode)
+        self._journal_retry_at = time.monotonic() + _JOURNAL_RETRY_SECONDS if mode != self._journal_wanted else None
+        self._log_path = database + "-wal"
+        self._fold_changes = self._sqlite.total_changes
+        self._fold_check_at = self._fold_retry_at = 0.0
+        self._lock.before_release = self._fold_log
+
+    def _fold_log(self, *, force: bool = False) -> None:
+        """Move finished writes from the write-ahead log into the database file.
+
+        With a write-ahead log the newest records exist only in the companion
+        ``-wal`` file until they are folded into the main file. Left alone,
+        megabytes can wait there while every client is idle, and then a copy of
+        the main file, or a backup or sync tool that copies the files one at a
+        time, misses or mismatches them. Folding and emptying the log as soon
+        as nothing is using it keeps the main file complete at rest, as it is
+        with a rollback journal.
+
+        Runs as the store lock is released: at once after this store's own
+        writes, otherwise now and then in case another process left something.
+        It never waits. If another client is reading, a later call tries again.
+        With a rollback journal there is no log and this does nothing.
+        """
+        try:
+            changes = self._sqlite.total_changes
+            now = time.monotonic()
+            if not force:
+                if changes == self._fold_changes:
+                    if now < self._fold_check_at:
+                        return
+                elif now < self._fold_retry_at:
+                    return
+            self._fold_check_at = now + _FOLD_CHECK_SECONDS
+            if self._journal_retry_at is not None and now >= self._journal_retry_at and not force:
+                mode = storage.switch_journal(self._sqlite, self._journal_wanted, wait_ms=0)
+                self._journal_retry_at = None if mode == self._journal_wanted else now + _JOURNAL_RETRY_SECONDS
+            try:
+                waiting = os.stat(self._log_path).st_size > 0
+            except FileNotFoundError:
+                waiting = False
+            if not waiting:
+                self._fold_changes = changes
+                return
+            if self._sqlite.in_transaction:
+                return
+            previous = int(self._sqlite.execute("PRAGMA busy_timeout").fetchone()[0])
+            self._sqlite.execute("PRAGMA busy_timeout=0")
+            try:
+                blocked = self._sqlite.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+            finally:
+                self._sqlite.execute(f"PRAGMA busy_timeout={previous}")
+            if blocked:
+                self._fold_retry_at = now + _FOLD_RETRY_SECONDS
+            else:
+                self._fold_changes = changes
+            with self._stats_lock:
+                self._write_stats["log_folds_deferred" if blocked else "log_folds"] += 1
+        except (sqlite3.Error, OSError):
+            # In use by a statement of this connection, or the store is closing.
+            self._fold_retry_at = time.monotonic() + _FOLD_RETRY_SECONDS
+
+    def settle(self) -> None:
+        """Call when an operation has finished: fold the log now if anything is waiting.
+
+        Does not wait for the store. If another thread is using it, that
+        thread's own release, and the end of its operation, do the same.
+        """
+        if self._lock.acquire(blocking=False):
+            try:
+                self._fold_log(force=True)
+            finally:
+                self._lock.release()
+
+    def storage_report(self) -> dict:
+        """Where this store's file lives and how it is shared. No paths or IDs."""
+        with self._lock:
+            mode = storage.journal_mode(self._sqlite)
+        return storage.report(self._location, mode, self._journal_preference)
 
     # ── embedder fingerprint guard (2026-08-13 #3) ───────────────────────────
     def _check_embedder_fingerprint(self, *, allow_mismatch: bool) -> None:
@@ -561,7 +833,8 @@ class MemoryStore:
                 )
 
     def get_meta(self, key: str) -> str | None:
-        row = self._sqlite.execute("SELECT value FROM store_meta WHERE key = ?", (key,)).fetchone()
+        with self._lock:
+            row = self._sqlite.execute("SELECT value FROM store_meta WHERE key = ?", (key,)).fetchone()
         return row[0] if row else None
 
     def set_meta(self, key: str, value: str) -> None:
@@ -659,13 +932,22 @@ class MemoryStore:
 
     # ── answer cache (2026-09-01 #1) ────────────────────────────────────────
     def _ensure_answer_cache_table(self) -> None:
-        self._sqlite.execute(
-            "CREATE TABLE IF NOT EXISTS answer_cache ("
-            "query TEXT PRIMARY KEY, answer TEXT NOT NULL, "
-            "cited_mem_ids TEXT NOT NULL, ts REAL NOT NULL, "
-            "hits INTEGER NOT NULL DEFAULT 0)"
-        )
-        self._sqlite.commit()
+        if getattr(self, "_has_answer_cache", False):
+            return
+        # Writers hold the store lock from first statement to commit: this is
+        # one shared connection, so an unlocked commit here would also commit
+        # whatever another thread's transaction had written so far.
+        with self._lock:
+            owns = not self._sqlite.in_transaction
+            self._sqlite.execute(
+                "CREATE TABLE IF NOT EXISTS answer_cache ("
+                "query TEXT PRIMARY KEY, answer TEXT NOT NULL, "
+                "cited_mem_ids TEXT NOT NULL, ts REAL NOT NULL, "
+                "hits INTEGER NOT NULL DEFAULT 0)"
+            )
+            if owns:
+                self._sqlite.commit()
+            self._has_answer_cache = True
 
     def get_cached_answer(self, query: str) -> tuple | None:
         """(query, answer, cited_json, ts, hits) for an exact query, or None."""
@@ -716,14 +998,14 @@ class MemoryStore:
         return float(row[0]) if row else float("-inf")
 
     def bump_cached_answer(self, query: str) -> None:
-        with suppress(Exception):
+        with suppress(Exception), self._lock:
             self._sqlite.execute(
                 "UPDATE answer_cache SET hits = hits + 1 WHERE query = ?", (query,)
             )
             self._sqlite.commit()
 
     def delete_cached_answer(self, query: str) -> None:
-        with suppress(Exception):
+        with suppress(Exception), self._lock:
             self._sqlite.execute("DELETE FROM answer_cache WHERE query = ?", (query,))
             self._sqlite.commit()
 
@@ -827,8 +1109,10 @@ class MemoryStore:
 
     def vec_delete(self, ids: list[str]) -> None:
         with self._lock:
+            owns = not self._sqlite.in_transaction
             self._sqlite.executemany("DELETE FROM memory_vec WHERE id = ?", [(i,) for i in ids])
-            self._sqlite.commit()
+            if owns:
+                self._sqlite.commit()
 
     def vec_search(self, query_json: str, k: int) -> list[tuple]:
         """(id, distance) rows, best-first (L2 on normalized vectors)."""
@@ -850,7 +1134,7 @@ class MemoryStore:
 
     # ── model-arms bandit (2026-09-01 #3) ────────────────────────────────────
     def _ensure_model_arms_table(self) -> None:
-        with suppress(Exception):
+        with suppress(Exception), self._lock:
             self._sqlite.execute(
                 "CREATE TABLE IF NOT EXISTS model_arms ("
                 "tier TEXT NOT NULL, model TEXT NOT NULL, "
@@ -979,113 +1263,421 @@ class MemoryStore:
         """If we fell back to in-memory, pre-populate vectors from SQLite so
         recall still works."""
         if isinstance(self._backend, InMemoryBackend):
-            rows = list(self._iter_sql())
+            with self._lock:
+                self._index_data_version = self._sqlite.execute("PRAGMA data_version").fetchone()[0]
+                rows = list(self._iter_sql())
             if rows:
                 texts = [r.text for r in rows]
                 vecs = self.embedder.embed_batch(texts)
                 self._backend.upsert(rows, vecs)
 
     # ── writes ───────────────────────────────────────────────────────────────
+    # Every change to a memory goes through one of the methods below. Each one
+    # decides and writes inside a single write transaction, so a writer can
+    # never apply a decision to data that another agent changed in between:
+    #
+    #   add       insert a new record (an existing ID is checked like update)
+    #   update    write back a record you read, refused if it changed since
+    #   mutate    read-edit-write on the current record, for small edits
+    #   supersede replace a fact, keeping the old one as linked history
+    #   delete    forget (tombstone); restore/purge undo or erase
+    #
+    # Tombstones are only ever set by delete and cleared by restore.
     def _ensure_deleted_at_column(self) -> None:
         """In-place migration: pre-tombstone DBs lack the deleted_at column
         (durable-delete safety). Idempotent."""
+        if self._has_deleted_at:
+            return
         with self._lock:
             cols = {r[1] for r in self._sqlite.execute("PRAGMA table_info(memories)").fetchall()}
             if cols and "deleted_at" not in cols:
                 self._sqlite.execute("ALTER TABLE memories ADD COLUMN deleted_at REAL")
                 self._sqlite.commit()
+            self._has_deleted_at = bool(cols)
+
+    @contextmanager
+    def write_transaction(self):
+        """One atomic write, ordered against every other writer.
+
+        The store lock orders threads sharing this connection. BEGIN IMMEDIATE
+        then takes SQLite's writer lock before the first read, so the caller
+        decides on committed data that no other process can change until the
+        transaction ends.
+
+        When a transaction is already open on this connection:
+
+        * opened by a write further up this thread's stack, the block joins it
+          and the outermost owner commits or rolls back everything together;
+        * opened only by a read snapshot, the snapshot ends here, because a
+          write joined to it would be rolled back with it;
+        * opened by a caller before it took the store lock, this write
+          continues and then commits it, as store writes always have. SQLite
+          still refuses the write if another process changed the data since
+          that transaction first read it.
+        """
+        with self._lock:
+            continuing = False
+            if self._sqlite.in_transaction:
+                if self._write_depth or (self._lock.depth > 1 and not self._snapshot_depth):
+                    yield
+                    return
+                if self._snapshot_depth:
+                    self._sqlite.rollback()
+                else:
+                    continuing = True
+            if not continuing:
+                self._sqlite.execute("BEGIN IMMEDIATE")
+            self._write_depth += 1
+            try:
+                yield
+                self._sqlite.commit()
+            except BaseException:
+                # A process-local index may have seen a change SQLite rolled back.
+                self._index_data_version = None
+                # Also reached when the commit itself times out: release the
+                # writer lock rather than leave a transaction open behind us.
+                if self._sqlite.in_transaction:
+                    self._sqlite.rollback()
+                raise
+            finally:
+                self._write_depth -= 1
+
+    def _row(self, memory_id: str):
+        return self._sqlite.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
+
+    def _conflict(self, current: Memory | None, memory_id: str) -> MemoryConflictError:
+        """Describe why a write to ``memory_id`` must not proceed."""
+        if current is None:
+            reason, head = "missing", None
+        elif current.deleted_at is not None:
+            reason, head = "deleted", None
+        elif current.is_superseded:
+            reason, head = "superseded", self.active_successor(current)
+        else:
+            reason, head = "changed", None
+        with self._stats_lock:
+            conflicts = self._write_stats["conflicts"]
+            conflicts[reason] = conflicts.get(reason, 0) + 1
+        return MemoryConflictError(memory_id, reason, current_id=head)
+
+    def active_successor(self, memory: Memory | str, *, limit: int = 64) -> str | None:
+        """ID of the active record a replaced memory now leads to, if any.
+
+        Follows ``superseded_by`` links. Returns None when the chain is broken,
+        circular, or ends in a forgotten record.
+        """
+        current = self.get(memory) if isinstance(memory, str) else memory
+        seen = set()
+        for _ in range(limit):
+            if current is None or current.id in seen or current.deleted_at is not None:
+                return None
+            if not current.is_superseded:
+                return current.id
+            seen.add(current.id)
+            successor = current.metadata.get("superseded_by")
+            current = self.get(successor) if isinstance(successor, str) else None
+        return None
+
+    def _score_importance(self, memory: Memory) -> None:
+        if memory.importance == 0.0 and self.importance_scorer:
+            try:
+                memory.importance = float(self.importance_scorer(memory.text, memory.type))
+            except Exception:
+                memory.importance = 5.0
+
+    def _adopt(self, memory: Memory) -> None:
+        """Make ``memory`` reflect its stored row, so it can be written again."""
+        row = self._row(memory.id)
+        if row is not None:
+            row = tuple(row)
+            memory._stored_token = stored_token(row)
+            memory.last_accessed, memory.access_count = row[6], row[7]
+            memory.deleted_at = row[10] if len(row) > 10 else None
+
+    def _write_existing(self, memory: Memory, row) -> bool:
+        """Apply ``memory`` to its existing row. Call inside a write transaction.
+
+        Returns True when the text changed. Raises MemoryConflictError rather
+        than overwrite a row the caller has not seen in its current state.
+        """
+        current = Memory.from_sql_row(tuple(row))
+        expected = getattr(memory, "_stored_token", None)
+        if expected is not None:
+            if expected != current._stored_token:
+                raise self._conflict(current, memory.id)
+        elif not current.is_retrievable():
+            # A copy that was never read from the store cannot knowingly edit
+            # a forgotten or replaced record.
+            raise self._conflict(current, memory.id)
+        else:
+            # ...and cannot know about protections added to the active one.
+            keep = {key: current.metadata[key] for key in (*PROTECTIVE_FLAGS, "supersedes")
+                    if current.metadata.get(key) and not memory.metadata.get(key)}
+            if keep:
+                memory.metadata = {**memory.metadata, **keep}
+        row_values = memory.to_sql_row()
+        self._sqlite.execute(
+            "UPDATE memories SET text = ?, type = ?, tags = ?, importance = ?, source = ?, "
+            "metadata = ?, last_accessed = MAX(last_accessed, ?), "
+            "access_count = MAX(access_count, ?) WHERE id = ?",
+            (row_values[1], row_values[2], row_values[3], row_values[4], row_values[8],
+             row_values[9], row_values[6], row_values[7], memory.id),
+        )
+        self._invalidate_cached_memory(memory.id)
+        return current.text != memory.text
 
     def add(self, memory: Memory) -> Memory:
-        """Insert (or upsert) a memory. Does NOT do Mem0-style dedup — see
-        consolidate.py for that. Use this when you know the memory is new."""
+        """Insert a new memory and index it. Does NOT do Mem0-style dedup — see
+        consolidate.py for that. Use this when you know the memory is new.
+
+        A record whose ID already exists is handled exactly like
+        :meth:`update`: it is written only if the stored row still matches what
+        the caller read, so re-adding an old copy cannot bring back a forgotten
+        or replaced memory.
+        """
+        return self._store(memory, same=None)[0]
+
+    def add_unless_present(self, memory: Memory, same) -> tuple[Memory, bool]:
+        """Insert ``memory`` unless an active record with identical text exists.
+
+        ``same(existing)`` decides whether an active record with the same text
+        and type really is the same memory (for example, same scope and
+        sources). The check and the insert share one write transaction, so two
+        agents saving the same fact at the same moment produce one record, and
+        a retried save returns the record the first attempt stored.
+
+        Returns ``(record, created)``.
+        """
+        return self._store(memory, same=same)
+
+    def _store(self, memory: Memory, *, same) -> tuple[Memory, bool]:
         self.assert_embedder_current()
         self._ensure_deleted_at_column()
-        with self._lock:
-            if memory.importance == 0.0 and self.importance_scorer:
-                try:
-                    memory.importance = float(self.importance_scorer(memory.text, memory.type))
-                except Exception:
-                    memory.importance = 5.0
+        self._score_importance(memory)
+        # Embedding can take a model call. Do it before taking any lock.
+        vectors = self.embedder.embed_batch([memory.text])
+        created = text_changed = False
+        with self.write_transaction():
             self.assert_embedder_current()
-            self._sqlite.execute(
-                "INSERT OR REPLACE INTO memories VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                memory.to_sql_row(),
-            )
-            self._invalidate_cached_memory(memory.id)
-            self._accumulate_importance(memory.importance)
-            self._sqlite.commit()
-            self._backend.upsert([memory], self.embedder.embed_batch([memory.text]))
+            row = self._row(memory.id)
+            if row is not None:
+                text_changed = self._write_existing(memory, row)
+            else:
+                if same is not None:
+                    for candidate in self._sqlite.execute(
+                        "SELECT * FROM memories WHERE text = ? AND type = ? AND deleted_at IS NULL "
+                        "ORDER BY created_at, id", (memory.text, memory.type),
+                    ).fetchall():
+                        existing = Memory.from_sql_row(tuple(candidate))
+                        if existing.is_retrievable() and same(existing):
+                            return existing, False
+                self._sqlite.execute(
+                    "INSERT INTO memories VALUES (?,?,?,?,?,?,?,?,?,?,?)", memory.to_sql_row(),
+                )
+                self._invalidate_cached_memory(memory.id)
+                self._accumulate_importance(memory.importance)
+                created = True
+            self._adopt(memory)
+            self._record_index_change(memory.id, memory, vectors, text_changed=created or text_changed)
+        self._deliver_external(memory.id, memory.text, vectors)
+        return memory, created
+
+    def update(self, memory: Memory) -> Memory:
+        """Write back a record that was read from this store.
+
+        Refused with :class:`MemoryConflictError` when the stored row no longer
+        matches what the caller read — it was forgotten, replaced by a
+        correction, or edited — so an old copy can never undo a newer decision.
+        For small edits prefer :meth:`mutate`, which cannot conflict.
+        Tombstones are not changed here; use :meth:`delete` / :meth:`restore`.
+        """
+        self.assert_embedder_current()
+        previous = self.get(memory.id)
+        vectors = (self.embedder.embed_batch([memory.text])
+                   if previous is not None and previous.text != memory.text else None)
+        with self.write_transaction():
+            self.assert_embedder_current()
+            row = self._row(memory.id)
+            if row is None:
+                raise self._conflict(None, memory.id)
+            text_changed = self._write_existing(memory, row)
+            self._adopt(memory)
+            self._record_index_change(memory.id, memory, vectors, text_changed=text_changed)
+        self._deliver_external(memory.id, memory.text, vectors)
         return memory
 
-    def update(self, memory: Memory) -> None:
-        self.add(memory)  # INSERT OR REPLACE handles upsert.
+    def mutate(self, memory_id: str, change, *, require_active: bool = True) -> Memory | None:
+        """Atomically read, edit and write one record.
 
-    def supersede(self, old_id: str, replacement: Memory) -> Memory:
+        ``change`` receives the current committed record while this store holds
+        the writer lock and returns the edited record, or None to leave it
+        untouched. The edit is decided on fresh data inside the write
+        transaction, so it cannot lose or undo a concurrent forget, correction
+        or privacy change. ``change`` must be quick, have no side effects and must not call the store.
+        A text edit may be recalculated if a writer intervenes during embedding.
+
+        A forgotten or replaced record raises :class:`MemoryConflictError`
+        unless ``require_active`` is False (for edits that must also reach
+        history, such as tightening privacy). The tombstone and the ID are
+        never altered. Returns the stored record, or None when unchanged.
+        """
+        self.assert_embedder_current()
+        previous_token, prepared_text, vectors = None, None, None
+        while True:
+            with self.write_transaction():
+                self.assert_embedder_current()
+                row = self._row(memory_id)
+                current = Memory.from_sql_row(tuple(row)) if row is not None else None
+                if current is None or (require_active and not current.is_retrievable()):
+                    raise self._conflict(current, memory_id)
+                if vectors is None or current._stored_token != previous_token:
+                    previous_token = current._stored_token
+                    edited = change(current)
+                    if edited is None:
+                        return None
+                    if edited.id != memory_id:
+                        raise ValueError("A memory's ID cannot be changed")
+                edited._stored_token = previous_token
+                text_changed = row["text"] != edited.text
+                if not text_changed or prepared_text == edited.text or current.deleted_at is not None:
+                    self._write_existing(edited, row)
+                    self._adopt(edited)
+                    self._record_index_change(memory_id, edited, vectors, text_changed=text_changed)
+                    break
+            # Verify the original revision after embedding. A concurrent edit
+            # requires applying the callback to that newer revision instead.
+            prepared_text = edited.text
+            vectors = self.embedder.embed_batch([prepared_text])
+        self._deliver_external(memory_id, prepared_text, vectors)
+        return edited
+
+    def supersede(self, old_id: str, replacement: Memory, *,
+                  expected: Memory | None = None, guard=None) -> Memory:
         """Explicitly correct a fact with an atomic SQLite history transition.
 
-        Prepare embeddings and stage the new vector first. Until the SQLite
-        insert commits, retrieval rejects that orphan vector. SQL failures leave
-        the old fact active and never leave an unlinked replacement record.
+        Prepare the replacement embedding first. The SQLite vector or external
+        index delivery ticket commits together with the history change.
+
+        Raises :class:`MemoryConflictError` when the old fact is no longer the
+        active one (forgotten, or already corrected by someone else) or, with
+        ``expected``, when it was edited since that copy was read. Privacy
+        flags on the old fact always carry over, so a correction prepared
+        before a concurrent tightening cannot be more visible than its source.
         """
         self.assert_embedder_current()
         if replacement.id == old_id or not replacement.is_retrievable():
             raise ValueError("Replacement must be a new, active memory")
         replacement.metadata = {**replacement.metadata, "supersedes": old_id}
         vectors = self.embedder.embed_batch([replacement.text])
-        with self._lock:
+        with self.write_transaction():
             self.assert_embedder_current()
             if self.get(replacement.id) is not None:
                 raise ValueError("Replacement memory ID already exists")
-            self._backend.upsert([replacement], vectors)
-            try:
-                self._sqlite.execute("BEGIN IMMEDIATE")
-                old = self.get(old_id)
-                if old is None or not old.is_retrievable():
-                    raise ValueError("Active memory not found")
-                self._sqlite.execute(
-                    "INSERT INTO memories VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    replacement.to_sql_row(),
-                )
-                old.metadata = {**old.metadata, "superseded_by": replacement.id,
-                                "valid_to": time.time()}
-                self._sqlite.execute(
-                    "UPDATE memories SET metadata = ? WHERE id = ?",
-                    (json.dumps(old.metadata), old.id),
-                )
-                self._invalidate_cached_memory(old.id)
-                self._accumulate_importance(replacement.importance)
-                self._sqlite.commit()
-            except Exception:
-                self._sqlite.rollback()
-                with suppress(Exception):
-                    self._backend.delete([replacement.id])
-                raise
+            row = self._row(old_id)
+            old = Memory.from_sql_row(tuple(row)) if row is not None else None
+            if old is None or not old.is_retrievable():
+                raise self._conflict(old, old_id)
+            if expected is not None and getattr(expected, "_stored_token", None) != old._stored_token:
+                raise self._conflict(old, old_id)
+            if guard is not None and not guard(old):
+                raise self._conflict(old, old_id)
+            inherited = {key: old.metadata[key] for key in PROTECTIVE_FLAGS
+                         if old.metadata.get(key) and not replacement.metadata.get(key)}
+            if inherited:
+                replacement.metadata = {**replacement.metadata, **inherited}
+            self._sqlite.execute("INSERT INTO memories VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                 replacement.to_sql_row())
+            old.metadata = {**old.metadata, "superseded_by": replacement.id,
+                            "valid_to": time.time()}
+            self._sqlite.execute("UPDATE memories SET metadata = ? WHERE id = ?",
+                                 (json.dumps(old.metadata), old.id))
+            self._invalidate_cached_memory(old.id)
+            self._accumulate_importance(replacement.importance)
+            self._adopt(replacement)
+            self._record_index_change(replacement.id, replacement, vectors)
+            self._record_index_change(old.id, old, text_changed=False)
+        self._deliver_external(replacement.id, replacement.text, vectors)
+        self._deliver_external(old_id)
         return replacement
 
-    def delete(self, memory_id: str) -> None:
+    def mark_superseded(self, older: Memory, newer: Memory) -> bool:
+        """Record that ``newer`` contradicts and replaces ``older``.
+
+        Both must still be exactly as the caller read them (the judgment was
+        made on those texts) and still active; otherwise nothing changes and
+        False is returned. Both rows change in one transaction.
+        """
+        now = time.time()
+        with self.write_transaction():
+            rows = self._row(older.id), self._row(newer.id)
+            if any(row is None for row in rows):
+                return False
+            current_older, current_newer = (Memory.from_sql_row(tuple(row)) for row in rows)
+            for seen, current in ((older, current_older), (newer, current_newer)):
+                if (not current.is_retrievable() or current.is_permanent
+                        or getattr(seen, "_stored_token", None) != current._stored_token):
+                    return False
+            current_older.metadata = {**current_older.metadata, "superseded_by": newer.id,
+                                      "valid_to": now}
+            current_newer.metadata = {
+                **current_newer.metadata,
+                "valid_from": max(float(current_newer.metadata.get("valid_from", 0.0)), now)}
+            for current in (current_older, current_newer):
+                self._sqlite.execute("UPDATE memories SET metadata = ? WHERE id = ?",
+                                     (json.dumps(current.metadata), current.id))
+                self._invalidate_cached_memory(current.id)
+                self._record_index_change(current.id, current, text_changed=False)
+            for seen, current in ((older, current_older), (newer, current_newer)):
+                seen.metadata = current.metadata
+                self._adopt(seen)
+        self._deliver_external(older.id)
+        self._deliver_external(newer.id)
+        return True
+
+    def delete(self, memory_id: str, *, expected: Memory | None = None, guard=None) -> bool:
         """SOFT delete (durable-delete safety): tombstone the row (deleted_at)
         and remove its vectors so recall stops surfacing it — the full text +
         metadata stay in SQLite, recoverable via :meth:`restore`. One bad
         reflection pass can no longer destroy memories. :meth:`purge` is the
-        only hard delete."""
+        only hard delete.
+
+        Returns True when this call forgot the record and False when there was
+        nothing active to forget, so repeating a forget is harmless.
+
+        Automatic passes supply ``expected`` (the copy they judged) and/or
+        ``guard(current) -> bool``. The record is then forgotten only if it is
+        still what was judged; otherwise :class:`MemoryConflictError` is raised
+        and a record that was pinned, corrected or edited meanwhile survives.
+        """
         self._ensure_deleted_at_column()
-        with self._lock:
-            self._sqlite.execute(
-                "UPDATE memories SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-                (time.time(), memory_id),
-            )
-            self._invalidate_cached_memory(memory_id)
-            self._sqlite.commit()
-        self._backend.delete([memory_id])
+        with self.write_transaction():
+            row = self._row(memory_id)
+            if row is None:
+                return False
+            current = Memory.from_sql_row(tuple(row))
+            forgotten = current.deleted_at is None
+            if forgotten:
+                if expected is not None and getattr(expected, "_stored_token", None) != current._stored_token:
+                    raise self._conflict(current, memory_id)
+                if guard is not None and not guard(current):
+                    raise self._conflict(current, memory_id)
+                self._sqlite.execute(
+                    "UPDATE memories SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                    (time.time(), memory_id),
+                )
+                self._invalidate_cached_memory(memory_id)
+            self._record_index_change(memory_id, None)
+        self._deliver_external(memory_id)
+        return forgotten
 
     def purge(self, memory_id: str) -> bool:
         """HARD delete (row + vectors). Returns True if a row was removed.
         Reserved for explicit erasure (privacy); everything else tombstones."""
-        with self._lock:
+        with self.write_transaction():
             cur = self._sqlite.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
             self._invalidate_cached_memory(memory_id)
-            self._sqlite.commit()
-        self._backend.delete([memory_id])
+            self._record_index_change(memory_id, None)
+        self._deliver_external(memory_id)
         return cur.rowcount > 0
 
     def restore(self, memory_id: str) -> Memory | None:
@@ -1093,16 +1685,259 @@ class MemoryStore:
         Memory, or None when the id doesn't exist (or was purged)."""
         self.assert_embedder_current()
         self._ensure_deleted_at_column()
-        with self._lock:
+        with self.write_transaction():
             self.assert_embedder_current()
             self._sqlite.execute(
                 "UPDATE memories SET deleted_at = NULL WHERE id = ?", (memory_id,)
             )
-            self._sqlite.commit()
-        mem = self.get(memory_id)
-        if mem is not None:
-            self._backend.upsert([mem], self.embedder.embed_batch([mem.text]))
+            self._invalidate_cached_memory(memory_id)
+            mem = self.get(memory_id)
+            self._record_index_change(memory_id, mem)
+        self._deliver_external(memory_id)
         return mem
+
+    # ── keeping the vector index in step with the records ────────────────────
+    # SQLite is the source of truth; an index is only ever a way to find rows.
+    # Search validates every hit against the live row, so a stale vector can
+    # hide a record from similarity search but never expose a forgotten one.
+    def _register_index(self) -> None:
+        """Register a persistent index once so writes through other backends reach it too."""
+        backend = self.settings.vector_backend
+        if backend == "memory" or self._sqlite.execute(
+                "SELECT 1 FROM memory_index_destinations WHERE backend = ?", (backend,)).fetchone():
+            return
+        with self.write_transaction():
+            self.assert_embedder_current()
+            registered = self._sqlite.execute(
+                "INSERT OR IGNORE INTO memory_index_destinations VALUES (?)", (backend,))
+            if not registered.rowcount:
+                return
+            # Existing indexes have no text-version stamps. Repair them from the
+            # records once, including entries the old retry format knew about.
+            self._sqlite.execute(
+                "INSERT OR IGNORE INTO memory_index_work(backend, id) SELECT ?, id FROM memories", (backend,))
+            try:
+                previous = json.loads(self.get_meta("memory_index_pending") or "[]")
+            except (ValueError, TypeError):
+                previous = None
+            if isinstance(previous, list):
+                self._sqlite.executemany(
+                    "INSERT OR IGNORE INTO memory_index_work(backend, id) VALUES (?, ?)",
+                    [(backend, mid) for mid in previous if isinstance(mid, str)])
+
+    def _record_index_change(self, mid, memory, vectors=None, *, text_changed=True) -> None:
+        """Called inside the source row's transaction. Each persistent destination
+        gets its own delivery ticket. The SQLite vector can commit immediately."""
+        # Never let a payload-only change clear a pending text repair.
+        # SQLite reads payloads directly from the record and needs no ticket for them.
+        upsert = (" ON CONFLICT(backend, id) DO UPDATE SET "
+                  "needs_vector = MAX(memory_index_work.needs_vector, excluded.needs_vector)")
+        self._sqlite.execute(
+            "INSERT INTO memory_index_work(backend, id, needs_vector) "
+            "SELECT backend, ?, ? FROM memory_index_destinations WHERE backend != 'sqlite_vec' OR ?"
+            + upsert, (mid, text_changed, text_changed))
+        backend = self._backend
+        if not backend.transactional and not isinstance(backend, InMemoryBackend):
+            # Also supports externally supplied index implementations.
+            self._sqlite.execute("INSERT INTO memory_index_work VALUES ('qdrant', ?, ?)" + upsert,
+                                 (mid, text_changed))
+            return
+        if memory is None or memory.deleted_at is not None:
+            backend.delete([mid])
+        elif text_changed:
+            backend.upsert([memory], vectors if vectors is not None else self.embedder.embed_batch([memory.text]))
+        else:
+            backend.refresh_payload([memory])
+        if backend.transactional and text_changed:
+            self._sqlite.execute("DELETE FROM memory_index_work WHERE backend = 'sqlite_vec' AND id = ?", (mid,))
+
+    def _deliver_external(self, mid, prepared_text=None, vectors=None) -> None:
+        if not self._backend.transactional and not isinstance(self._backend, InMemoryBackend):
+            with self._lock:
+                if self._sqlite.in_transaction:
+                    return  # The outer writer still owns the source row and its delivery ticket.
+            self._deliver_index_entry("qdrant", mid, prepared_text, vectors)
+
+    def _deliver_index_entry(self, backend, mid, prepared_text=None, vectors=None) -> str | None:
+        """Prepare outside the write lock, then publish only the current SQLite row.
+        SQLite orders remote deliveries across processes. A crash or provider error
+        leaves the committed ticket for the next retry."""
+        try:
+            query = "SELECT needs_vector FROM memory_index_work WHERE backend = ? AND id = ?"
+            refresh = getattr(self._backend, "refresh_payload", None)
+            with self._lock:
+                ticket = self._sqlite.execute(query, (backend, mid)).fetchone()
+                if ticket is None:
+                    return None
+                seen = self.get(mid)
+            if seen is None or prepared_text != seen.text:
+                vectors = None
+            if seen is not None and seen.deleted_at is None and vectors is None and (ticket[0] or refresh is None):
+                vectors = self.embedder.embed_batch([seen.text])
+            with self.write_transaction():
+                ticket = self._sqlite.execute(query, (backend, mid)).fetchone()
+                if ticket is None:
+                    return None
+                self.assert_embedder_current()
+                current = self.get(mid)
+                if current is None or current.deleted_at is not None:
+                    self._backend.delete([mid])
+                    action = "removed"
+                elif seen is None or seen.deleted_at is not None or current.text != seen.text:
+                    return None  # A newer writer owns the outstanding delivery.
+                elif not ticket[0] and refresh is not None:
+                    refresh([current])
+                    action = "indexed"
+                elif vectors is not None:
+                    self._backend.upsert([current], vectors)
+                    action = "indexed"
+                else:
+                    return None  # A full repair was queued while preparing a payload update.
+                self._sqlite.execute("DELETE FROM memory_index_work WHERE backend = ? AND id = ?", (backend, mid))
+                return action
+        except Exception as exc:
+            log.warning("vector index update deferred (%s)", type(exc).__name__)
+            with self._stats_lock:
+                self._write_stats["index_failures"] += 1
+            return None
+
+    def _pending_backend(self) -> str | None:
+        if self._backend.transactional:
+            return "sqlite_vec"
+        return None if isinstance(self._backend, InMemoryBackend) else "qdrant"
+
+    def _pending_index_count(self) -> int:
+        backend = self._pending_backend()
+        if backend is None:
+            return 0
+        with self._lock:
+            return self._sqlite.execute("SELECT COUNT(*) FROM memory_index_work WHERE backend = ?",
+                                        (backend,)).fetchone()[0]
+
+    def _repair_index_at_open(self) -> None:
+        if not isinstance(self._backend, InMemoryBackend):
+            try:
+                self.reconcile_index()
+            except Exception as exc:
+                log.warning("vector index repair deferred (%s)", type(exc).__name__)
+
+    def _retry_pending_index(self) -> None:
+        if isinstance(self._backend, InMemoryBackend) or time.monotonic() < self._index_retry_at:
+            return
+        with self._lock:
+            if self._sqlite.in_transaction or not self._pending_index_count():
+                return
+        # Healthy deliveries must not throttle an unrelated subsequent write.
+        report = self.reconcile_index()
+        self._index_retry_at = time.monotonic() + 30 if report["pending"] else 0.0
+
+    def reconcile_index(self) -> dict:
+        """Repair missing or outstanding deliveries using the latest committed text."""
+        self.assert_embedder_current()
+        report = {"indexed": 0, "removed": 0, "pending": 0}
+        backend = self._pending_backend()
+        if backend is None:
+            report["indexed"], report["removed"] = self._refresh_index_from_other_writers(force=True)
+            return report
+        with self._lock:
+            if self._sqlite.in_transaction:
+                report["pending"] = self._pending_index_count()
+                return report
+        if self._backend.transactional:
+            # Also handle orphaned/missing IDs from older versions or a restore.
+            missing = ("SELECT id FROM memories WHERE deleted_at IS NULL EXCEPT SELECT id FROM memory_vec")
+            extra = ("SELECT id FROM memory_vec EXCEPT SELECT id FROM memories WHERE deleted_at IS NULL")
+            with self._lock:
+                needs_repair = self._sqlite.execute(f"SELECT 1 FROM ({missing}) LIMIT 1").fetchone() or (
+                    self._sqlite.execute(f"SELECT 1 FROM ({extra}) LIMIT 1").fetchone())
+            if needs_repair:
+                with self.write_transaction():
+                    for difference in (missing, extra):
+                        self._sqlite.execute(
+                            f"INSERT OR IGNORE INTO memory_index_work(backend, id) SELECT ?, id FROM ({difference})", (backend,))
+        with self._lock:
+            pending = [row[0] for row in self._sqlite.execute(
+                "SELECT id FROM memory_index_work WHERE backend = ? ORDER BY id", (backend,))]
+        for mid in pending:
+            action = self._deliver_index_entry(backend, mid)
+            if action is not None:
+                report[action] += 1
+        report["pending"] = self._pending_index_count()
+        return report
+
+    def _refresh_index_from_other_writers(self, *, force: bool = False) -> tuple[int, int]:
+        """Catch the process-local index up with records other processes wrote.
+
+        Each process using the in-memory backend builds its own index. Without
+        this, a memory saved by one assistant stays invisible to similarity
+        search in another until that process restarts. SQLite reports cheaply
+        whether any other connection committed; only then are record texts
+        compared with what is indexed, and only new or edited ones embedded.
+        """
+        backend = self._backend
+        if not isinstance(backend, InMemoryBackend):
+            return 0, 0
+        with self._lock:
+            if self._sqlite.in_transaction and (self._write_depth or not self._snapshot_depth):
+                return 0, 0  # don't publish uncommitted rows from a writer
+            version = self._sqlite.execute("PRAGMA data_version").fetchone()[0]
+            if not force and version == self._index_data_version:
+                return 0, 0
+            rows = self._sqlite.execute(
+                "SELECT id, text FROM memories WHERE deleted_at IS NULL").fetchall()
+        indexed = backend.digests()
+        stale = {mid: text for mid, text in rows if indexed.get(mid) != backend.text_digest(text)}
+        extra = set(indexed) - {mid for mid, _ in rows}
+        if not stale and not extra:
+            with self._lock:
+                self._index_data_version = version
+            return 0, 0
+        ids = sorted(stale)
+        vectors = dict(zip(ids, self.embedder.embed_batch([stale[mid] for mid in ids]), strict=True)) if ids else {}
+        added = removed = 0
+        # Apply under the store lock against a fresh read: a record this
+        # process changed while we were embedding is left to its own writer.
+        with self._lock:
+            current = {}
+            wanted = ids + sorted(extra)
+            for start in range(0, len(wanted), 500):
+                batch = wanted[start:start + 500]
+                marks = ",".join("?" for _ in batch)
+                for row in self._sqlite.execute(
+                        f"SELECT * FROM memories WHERE deleted_at IS NULL AND id IN ({marks})", batch):
+                    current[row[0]] = Memory.from_sql_row(tuple(row))
+            fresh = [current[mid] for mid in ids if mid in current and current[mid].text == stale[mid]]
+            if fresh:
+                backend.upsert(fresh, [vectors[m.id] for m in fresh])
+                added = len(fresh)
+            gone = [mid for mid in sorted(extra) if mid not in current]
+            if gone:
+                backend.delete(gone)
+                removed = len(gone)
+            # Searches inside a read snapshot can now use this version. Keep
+            # the previous one on any failure so the next search retries.
+            self._index_data_version = version
+        with self._stats_lock:
+            self._write_stats["index_refreshes"] += 1
+            self._write_stats["index_refreshed_records"] += added + removed
+        return added, removed
+
+    def write_diagnostics(self) -> dict:
+        """Counts describing write conflicts and index upkeep. No record data."""
+        with self._stats_lock:
+            stats = {"conflicts": dict(self._write_stats["conflicts"]),
+                     "index_failures": self._write_stats["index_failures"],
+                     "index_refreshes": self._write_stats["index_refreshes"],
+                     "index_refreshed_records": self._write_stats["index_refreshed_records"],
+                     "log_folds": self._write_stats["log_folds"],
+                     "log_folds_deferred": self._write_stats["log_folds_deferred"]}
+        stats["index_pending"] = self._pending_index_count()
+        stats["store_lock"] = self._lock.snapshot()
+        stats["index_scope"] = ("shared: stored in this database" if self._backend.transactional
+                                else "process-local: refreshed when another process commits"
+                                if isinstance(self._backend, InMemoryBackend)
+                                else "external service")
+        return stats
 
     def touch(self, memory_id: str, *, defer: bool = False) -> None:
         """Mark a memory as accessed (bumps last_accessed + access_count).
@@ -1113,7 +1948,8 @@ class MemoryStore:
         deferral changes nothing mathematically.
         """
         if defer:
-            self._touch_buffer.add(memory_id)
+            with self._stats_lock:
+                self._touch_buffer.add(memory_id)
             return
         with self._lock:
             self._sqlite.execute(
@@ -1125,11 +1961,11 @@ class MemoryStore:
     def flush_touches(self) -> int:
         """Apply all deferred touches in a single transaction. Returns the
         number of memories touched. Safe to call when the buffer is empty."""
-        if not self._touch_buffer:
+        with self._stats_lock:
+            ids, self._touch_buffer = list(self._touch_buffer), set()
+        if not ids:
             return 0
         now = time.time()
-        ids = list(self._touch_buffer)
-        self._touch_buffer.clear()
         with self._lock:
             self._sqlite.executemany(
                 "UPDATE memories SET last_accessed = ?, access_count = access_count + 1 WHERE id = ?",
@@ -1141,24 +1977,30 @@ class MemoryStore:
     # ── reads ────────────────────────────────────────────────────────────────
     def get(self, memory_id: str) -> Memory | None:
         """Id lookup — returns tombstoned rows too (restore + audit need
-        them). Use Memory.is_retrievable for any user-facing retrieval."""
-        row = self._sqlite.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        them). Use Memory.is_retrievable for any user-facing retrieval.
+
+        Reads take the store lock like writes do. They wait for a write in
+        progress instead of seeing half of it, and never share the connection
+        with another thread mid-statement."""
+        with self._lock:
+            row = self._sqlite.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         if row is None:
             return None
         return Memory.from_sql_row(tuple(row))
 
     def list_all(self, limit: int = 200, type_filter: MemoryType | None = None) -> list[Memory]:
         """Live (non-tombstoned) memories, newest first."""
-        if type_filter:
-            rows = self._sqlite.execute(
-                "SELECT * FROM memories WHERE deleted_at IS NULL AND type = ? ORDER BY created_at DESC LIMIT ?",
-                (type_filter, limit),
-            ).fetchall()
-        else:
-            rows = self._sqlite.execute(
-                "SELECT * FROM memories WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+        with self._lock:
+            if type_filter:
+                rows = self._sqlite.execute(
+                    "SELECT * FROM memories WHERE deleted_at IS NULL AND type = ? ORDER BY created_at DESC LIMIT ?",
+                    (type_filter, limit),
+                ).fetchall()
+            else:
+                rows = self._sqlite.execute(
+                    "SELECT * FROM memories WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
         return [Memory.from_sql_row(tuple(r)) for r in rows]
 
     def vector_search(
@@ -1179,27 +2021,46 @@ class MemoryStore:
         k = self.settings.recall_topk if top_k is None else int(top_k)
         if k <= 0:
             return []
+        self._refresh_index_from_other_writers()
+        self._retry_pending_index()
         qv = self.embedder.embed(query)
         from hunter_gatherer.memory.retrieval_context import capture_query_vector
         capture_query_vector(query, qv, self.embedder.fingerprint())
-        fetch_k = k
+        # Another process can change filterable fields without changing the
+        # vector. The in-memory backend already scores all vectors in one pass.
+        # Take that ranking once and apply the caller's filters to live rows.
+        filter_live = bool(filters) and isinstance(self._backend, InMemoryBackend)
+        fetch_k = max(k, self._backend.count()) if filter_live else k
         maximum = None
         while True:
             self.assert_embedder_current()
-            raw = self._backend.search(qv, query, fetch_k, filters=filters)
+            raw = self._backend.search(qv, query, fetch_k, filters=None if filter_live else filters)
             hits: list[VectorSearchHit] = []
             seen: set[str] = set()
             for hit in raw:
                 if hit.id in seen:
                     continue
                 seen.add(hit.id)
-                memory = self.get(hit.id)
+                backend = self._pending_backend()
+                if backend is None:
+                    memory = self.get(hit.id)
+                else:
+                    # An unavailable external service, or a writer using another
+                    # backend, may have left this ID at an older revision.
+                    with self._lock:
+                        row = self._sqlite.execute(
+                            "SELECT * FROM memories WHERE id = ? AND NOT EXISTS "
+                            "(SELECT 1 FROM memory_index_work WHERE backend = ? AND id = memories.id)",
+                            (hit.id, backend)).fetchone()
+                    memory = Memory.from_sql_row(tuple(row)) if row is not None else None
                 if memory is not None and memory.is_retrievable(
                     filters, include_superseded=include_superseded,
                 ):
                     hits.append(VectorSearchHit(hit.id, hit.score, memory.to_payload()))
-            if len(hits) >= k or len(raw) < fetch_k:
-                return hits[:k]
+                    if len(hits) == k:
+                        return hits
+            if len(raw) < fetch_k:
+                return hits
             if maximum is None:
                 maximum = max(self.count(), self._backend.count())
             if fetch_k >= maximum:
@@ -1208,17 +2069,19 @@ class MemoryStore:
 
     def count(self) -> int:
         """Live (non-tombstoned) memory count."""
-        return self._sqlite.execute(
-            "SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL"
-        ).fetchone()[0]
+        with self._lock:
+            return self._sqlite.execute(
+                "SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL"
+            ).fetchone()[0]
 
     def tombstoned(self, limit: int = 200) -> list[Memory]:
         """Tombstoned-but-recoverable memories, newest-deleted first (audit)."""
         self._ensure_deleted_at_column()
-        rows = self._sqlite.execute(
-            "SELECT * FROM memories WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._sqlite.execute(
+                "SELECT * FROM memories WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [Memory.from_sql_row(tuple(r)) for r in rows]
 
     # ── snapshots (belt-and-suspenders around destructive passes) ────────────
@@ -1304,17 +2167,21 @@ class MemoryStore:
         high-importance context doesn't drift when it isn't query-relevant."""
         if n <= 0:
             return []
-        rows = self._sqlite.execute(
-            "SELECT * FROM memories WHERE deleted_at IS NULL AND type = 'episodic' "
-            "ORDER BY created_at DESC",
-        )
         memories = []
-        for row in rows:
-            memory = Memory.from_sql_row(tuple(row))
-            if memory.is_retrievable():
-                memories.append(memory)
-                if len(memories) >= int(n):
-                    break
+        with self._lock:
+            rows = self._sqlite.execute(
+                "SELECT * FROM memories WHERE deleted_at IS NULL AND type = 'episodic' "
+                "ORDER BY created_at DESC",
+            )
+            try:
+                for row in rows:
+                    memory = Memory.from_sql_row(tuple(row))
+                    if memory.is_retrievable():
+                        memories.append(memory)
+                        if len(memories) >= int(n):
+                            break
+            finally:
+                rows.close()  # an unfinished read would keep holding its lock
         return memories
 
     # ── router-decision log (idea #1) ────────────────────────────────────────
@@ -1440,7 +2307,11 @@ class MemoryStore:
         yield from self._iter_sql()
 
     def _iter_sql(self) -> Iterator[Memory]:
-        for row in self._sqlite.execute("SELECT * FROM memories WHERE deleted_at IS NULL"):
+        # Read everything under the lock, then hand rows out: a generator left
+        # half-consumed must not keep a statement open on the shared connection.
+        with self._lock:
+            rows = self._sqlite.execute("SELECT * FROM memories WHERE deleted_at IS NULL").fetchall()
+        for row in rows:
             yield Memory.from_sql_row(tuple(row))
 
     # ── pipeline persistence ───────────────────────────────────────────────
@@ -1578,10 +2449,11 @@ class MemoryStore:
 
     def get_links(self, memory_id: str) -> list[str]:
         """Outgoing link ids, best-score first."""
-        rows = self._sqlite.execute(
-            "SELECT link_id FROM memory_links WHERE memory_id = ? ORDER BY score DESC",
-            (memory_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._sqlite.execute(
+                "SELECT link_id FROM memory_links WHERE memory_id = ? ORDER BY score DESC",
+                (memory_id,),
+            ).fetchall()
         return [r[0] for r in rows]
 
     def link_count(self) -> int:
@@ -1725,6 +2597,16 @@ class MemoryStore:
         fingerprint = self.embedder.fingerprint() if hasattr(self.embedder, "fingerprint") else None
         if not isinstance(fingerprint, str) or not fingerprint:
             raise ValueError("A stable embedder fingerprint is required before rebuilding")
+        def require_local_migration():
+            if old_fingerprint != fingerprint and self._sqlite.execute(
+                    "SELECT 1 FROM memory_index_destinations WHERE backend = 'qdrant'").fetchone():
+                raise RuntimeError(
+                    "This library also uses Qdrant. Changing its embedding model requires a verified "
+                    "Qdrant collection and alias migration before advancing the library fingerprint."
+                )
+
+        with self._lock:
+            require_local_migration()
         vectors, dimension = stage_embeddings(
             self.embedder, [m.text for m in memories] + [row["text"] for row in archive_snapshot],
             batch=batch,
@@ -1743,6 +2625,7 @@ class MemoryStore:
         with self._lock, self._backend._lock:
             try:
                 self._sqlite.execute("BEGIN IMMEDIATE")
+                require_local_migration()  # Another process may have registered Qdrant during staging.
                 current = sorted(tuple(row) for row in self._sqlite.execute(
                     "SELECT * FROM memories WHERE deleted_at IS NULL ORDER BY id"
                 ).fetchall())
@@ -1793,6 +2676,10 @@ class MemoryStore:
     def close(self) -> None:
         with self._lock:
             self._backend.close()
+            # Leave the main file complete. When this was the last connection
+            # SQLite also removes the log's companion files.
+            self._fold_log(force=True)
+            self._lock.before_release = None
             self._sqlite.close()
 
     def __enter__(self) -> MemoryStore:
@@ -1817,7 +2704,14 @@ def _norm(v: list[float]) -> float:
     return math.sqrt(sum(x * x for x in v))
 
 
+_sumprod = getattr(math, "sumprod", None)  # Python 3.12+
+
+
 def _dot(a: list[float], b: list[float]) -> float:
+    if _sumprod is not None:
+        # A C loop instead of a Python one: several times faster for the
+        # brute-force in-memory index, with the same ranking.
+        return _sumprod(a, b)
     return sum(x * y for x, y in zip(a, b, strict=True))
 
 

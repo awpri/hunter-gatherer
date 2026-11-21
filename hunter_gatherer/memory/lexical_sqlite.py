@@ -71,14 +71,23 @@ def lexical_candidates(store, query: str, limit: int, filters=None):
         return []
     match = ' OR '.join('"' + token + '"' for token in tokens)
     db = store._sqlite
-    def eligible(*row):
-        return int(Memory.from_sql_row(row).is_retrievable(filters, include_superseded=True))
-    db.create_function('memory_fts_eligible', 11, eligible)
-    rows = db.execute("""
-        SELECT m.id FROM memory_fts JOIN memories m ON m.rowid=memory_fts.rowid
-        WHERE memory_fts MATCH ? AND memory_fts_eligible(
-            m.id,m.text,m.type,m.tags,m.importance,m.created_at,m.last_accessed,
-            m.access_count,m.source,m.metadata,m.deleted_at)
-        ORDER BY bm25(memory_fts), m.id LIMIT ?
-    """, (match, limit)).fetchall()
-    return [row[0] for row in rows]
+    # Eligibility is decided here, on rows streamed in rank order, not by a SQL
+    # function calling back into Python. Such a callback needs the interpreter
+    # lock while its statement holds this shared connection, and deadlocks with
+    # a thread that holds the interpreter lock while waiting for the connection.
+    cursor = db.execute("""
+        SELECT m.id,m.text,m.type,m.tags,m.importance,m.created_at,m.last_accessed,
+               m.access_count,m.source,m.metadata,m.deleted_at
+        FROM memory_fts JOIN memories m ON m.rowid=memory_fts.rowid
+        WHERE memory_fts MATCH ? ORDER BY bm25(memory_fts), m.id
+    """, (match,))
+    try:
+        ids = []
+        for row in cursor:
+            if Memory.from_sql_row(tuple(row)).is_retrievable(filters, include_superseded=True):
+                ids.append(row[0])
+                if len(ids) >= limit:
+                    break
+        return ids
+    finally:
+        cursor.close()  # an unfinished read would keep holding its lock

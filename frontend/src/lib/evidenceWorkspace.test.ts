@@ -6,7 +6,7 @@ import pilotPlan from '../../../hunter_gatherer/demo_data/pilot-plan-v2.md?raw';
 import quantityCasesJSON from '../../../tests/fixtures/release_retrieval/quantity-cases.json?raw';
 // @ts-expect-error Vite raw source import shares independent negative guards.
 import quantityNegativeCasesJSON from '../../../tests/fixtures/release_retrieval/quantity-negative-cases.json?raw';
-import {findPacket,appendFindPage,findResultsHeading,packetContextReferences,passageExcerpt,passageLocation} from './evidenceWorkspace';
+import {findPacket,appendFindPage,continuationNotes,findResultsHeading,packetContextReferences,passageExcerpt,passageLocation} from './evidenceWorkspace';
 import {describe,it,expect} from 'vitest';
 const quantityCases=JSON.parse(quantityCasesJSON).cases as {id:string;question:string;quote:string;expected_focus:string|null;required_context:string}[];
 const quantityNegativeCases=JSON.parse(quantityNegativeCasesJSON).cases as {id:string;question:string;quote:string}[];
@@ -59,6 +59,21 @@ describe('Find page diagnostic retention',()=>{
   const second={...base,warnings:['second warning'],projection:{omitted_reference_count:2},requirement_checks:[{query:'outcome',selected_citations:['[doc:d#b]'],retrieval_assessment:{candidate_citations:['[mem:b]']},warnings:[],next_step:'Open'}]};
   const merged=appendFindPage(first,second);
   expect(merged.warnings).toEqual(['first warning','second warning']);expect(merged.retrieval?.warnings).toEqual(['retrieval warning']);expect(merged.usage_guidance).toEqual(['review first']);expect(merged.missing_information).toEqual([{...gap,page:1}]);expect(merged.source_families).toEqual([family]);expect(merged.source_leads).toEqual([{citation:'[doc:d#c]'}]);expect(merged.requirement_checks[0].selected_citations).toEqual(['[doc:d#c]','[doc:d#b]']);expect(merged.requirement_checks[0].retrieval_assessment.candidate_citations).toEqual(['[mem:a]','[mem:b]']);expect(merged.requirement_checks[0].warnings).toEqual(['requirement warning']);expect(merged.projection?.omitted_reference_count).toBe(2);
+ });
+});
+
+describe('Continuation notes',()=>{
+ it('totals withdrawn matches across pages and keeps the added and limit notes',()=>{
+  const added='Not included; search again to include them.';
+  const first=findPacket({query:'q',relevant_memories:[],supporting_passages:[],requirement_checks:[],missing_information:[],usage_guidance:[],retrieval_assessment:{},continuation:{next_cursor:'a',scope:'Admitted matches'}});
+  expect(continuationNotes(first)).toEqual([]);
+  const second=appendFindPage(first,{...first,continuation:{next_cursor:'b',scope:'Admitted matches',withdrawn:1,added_since_first_page:added}});
+  expect(continuationNotes(second)).toEqual(['1 match from this search is no longer available and was left out.','New records were added after this search began. Search again to include them.']);
+  const third=appendFindPage(second,{...first,continuation:{next_cursor:null,scope:'Admitted matches',withdrawn:2,admitted_limit_reached:true}});
+  expect(third.continuation).toEqual({next_cursor:null,scope:'Admitted matches',withdrawn:3,added_since_first_page:added,admitted_limit_reached:true});
+  expect(continuationNotes(third)).toEqual(['3 matches from this search are no longer available and were left out.','New records were added after this search began. Search again to include them.','More matches may be available. Narrow your question to see them.']);
+  // While more pages can be loaded, the limit is not mentioned yet.
+  expect(continuationNotes({...third,continuation:{...third.continuation!,next_cursor:'c'}})).not.toContain('More matches may be available. Narrow your question to see them.');
  });
 });
 

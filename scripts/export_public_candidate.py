@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Finite review boundary: no recursive tests/docs/evaluation inclusion.
 PUBLIC_TESTS = (
     "tests/conftest.py", "tests/test_config_env.py", "tests/test_memory_store.py",
+    "tests/test_concurrent_memory.py", "tests/test_store_transactions.py",
+    "tests/test_access_policy.py", "tests/test_storage_location.py",
     "tests/test_backup.py", "tests/test_demo.py", "tests/test_demo_cli.py",
     "tests/test_public_candidate.py", "tests/test_find_reference_labels.py",
     "tests/test_find_focused_delivery.py",
@@ -48,6 +50,7 @@ PUBLIC_FIXTURES = ("tests/fixtures/find_subject_v1.json", "tests/fixtures/releas
 PUBLIC_DOCS = (
     "docs/public-release-guide.md", "docs/release-provenance-20261014.md", "docs/visual-regions.md",
     "docs/index.md", "docs/getting-started.md", "docs/usage.md", "docs/mcp.md",
+    "docs/concurrency.md", "docs/hosting.md",
     "docs/cli.md", "docs/retrieval-evaluation-v0.1.0a1.md", "CHANGELOG.md",
     "docs/assets/alpha-library.png",
     "docs/faq.md", "docs/roadmap.md", "docs/assets/wordmark.svg", "CONTRIBUTING.md", "SECURITY.md",
@@ -79,6 +82,7 @@ def selected_paths():
         "hunter_gatherer/skills/examples/research/SKILL.md",
         "scripts/check_publication_hygiene.py", "scripts/export_public_candidate.py",
         "scripts/smoke_packaged_demo.py", "scripts/smoke_personal_library.py", "scripts/evaluate_release_retrieval.py",
+        "scripts/benchmark_concurrency.py",
         ".github/workflows/packaged-demo.yml", "docs/demo.md",
     ])
     selected.update(path.relative_to(ROOT).as_posix()

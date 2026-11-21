@@ -26,7 +26,7 @@ import logging
 import math
 
 from hunter_gatherer.memory.embeddings import Embedder
-from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.schemas import Memory, MemoryConflictError
 from hunter_gatherer.memory.store import MemoryStore
 
 log = logging.getLogger(__name__)
@@ -136,16 +136,24 @@ class ProceduralMiner:
 
     def _bump(self, existing: Memory, tool_sequence: list[str]) -> None:
         """Reinforce an existing procedural memory on recurrence."""
-        meta = dict(existing.metadata)
-        meta["occurrences"] = int(meta.get("occurrences", 1)) + 1
-        # Union the tools seen (captures minor sequence variation over time).
-        tools = list(dict.fromkeys(meta.get("tools", []) + tool_sequence))
-        meta["tools"] = tools
-        existing.metadata = meta
-        # Importance grows with recurrence (capped at 9 — below the "must keep"
-        # tier that reflection treats specially).
-        existing.importance = min(9.0, existing.importance + 0.5)
-        self.store.update(existing)
+        def reinforce(current: Memory) -> Memory:
+            # Count on the stored record, so two sessions reinforcing the same
+            # procedure at once are both counted.
+            meta = dict(current.metadata)
+            meta["occurrences"] = int(meta.get("occurrences", 1)) + 1
+            # Union the tools seen (captures minor sequence variation over time).
+            meta["tools"] = list(dict.fromkeys(meta.get("tools", []) + tool_sequence))
+            current.metadata = meta
+            # Importance grows with recurrence (capped at 9 — below the "must keep"
+            # tier that reflection treats specially).
+            current.importance = min(9.0, current.importance + 0.5)
+            return current
+
+        try:
+            existing = self.store.mutate(existing.id, reinforce)
+        except MemoryConflictError:
+            return  # forgotten or replaced meanwhile: nothing left to reinforce
+        meta = existing.metadata
         log.info("reinforced procedural memory %s (occurrences=%d)", existing.id, meta["occurrences"])
         # Procedural→pipeline promotion (2026-08-13 #2): graduate the sequence
         # into an authored pipeline once recurrence crosses the threshold, so

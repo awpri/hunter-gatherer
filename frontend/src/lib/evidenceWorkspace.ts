@@ -10,7 +10,7 @@ export interface FileLead {source_reference?:OriginalFileReference;original_cita
 export interface FileDiscovery {executed:boolean;reason?:string;candidates:FileLead[];queries?:string[];matching_documents?:number;omitted_documents?:number;documents_with_omitted_metadata?:number}
 export interface OmittedReference {citation?:string;stream:string;rank:number;omission_reason?:string;navigation_labels?:{title?:string;text_prefix?:string;section?:string;page?:number|string};source_references?:{citation?:string}[]}
 export interface DiscoveryLead {citation?:string;record_id?:string;memory_id?:string;derived_text?:string;navigation_labels?:{title?:string;text_prefix?:string};source_references?:{citation?:string}[]}
-export interface EvidencePacket {visual_region_discovery?:{scope:string;candidate_limit_reached?:boolean;remaining?:number};visual_regions?:VisualRegion[];executed_requirements?:string[];loaded_pages?:number;memory_discovery?:{candidates:DiscoveryLead[];omitted_candidates?:number};enrichment_discovery?:{candidates:DiscoveryLead[]};source_leads?:DiscoveryLead[];warnings?:string[];continuation?:{next_cursor:string|null;scope?:string};omitted_references?:OmittedReference[];projection?:{omitted_counts?:Record<string,number>;omitted_reference_count?:number;[key:string]:unknown};retrieval_paths?:RetrievalPaths;source_discovery?:FileDiscovery;source_families?:SourceFamily[];query:string;relevant_memories:EvidenceMemory[];supporting_passages:SourcePassage[];missing_information:{question:string;field:string;page?:number}[];requirement_checks:{query:string;assessment_page?:number;selected_citations?:string[];retrieval_assessment:Assessment;warnings:string[];next_step:string}[];retrieval_assessment:Assessment;usage_guidance:string[];retrieval?:{warnings:string[]}}
+export interface EvidencePacket {visual_region_discovery?:{scope:string;candidate_limit_reached?:boolean;remaining?:number};visual_regions?:VisualRegion[];executed_requirements?:string[];loaded_pages?:number;memory_discovery?:{candidates:DiscoveryLead[];omitted_candidates?:number};enrichment_discovery?:{candidates:DiscoveryLead[]};source_leads?:DiscoveryLead[];warnings?:string[];continuation?:{next_cursor:string|null;scope?:string;withdrawn?:number;added_since_first_page?:string;admitted_limit_reached?:boolean};omitted_references?:OmittedReference[];projection?:{omitted_counts?:Record<string,number>;omitted_reference_count?:number;[key:string]:unknown};retrieval_paths?:RetrievalPaths;source_discovery?:FileDiscovery;source_families?:SourceFamily[];query:string;relevant_memories:EvidenceMemory[];supporting_passages:SourcePassage[];missing_information:{question:string;field:string;page?:number}[];requirement_checks:{query:string;assessment_page?:number;selected_citations?:string[];retrieval_assessment:Assessment;warnings:string[];next_step:string}[];retrieval_assessment:Assessment;usage_guidance:string[];retrieval?:{warnings:string[]}}
 export type CollectionReference = {memory_id:string;document_id?:never;chunk_id?:never}|{document_id:string;chunk_id?:string;memory_id?:never;version?:never;original_content_hash?:never;page?:never}|(OriginalPageReference&{memory_id?:never;chunk_id?:never})|(OriginalFileReference&{memory_id?:never;chunk_id?:never;page?:never});
 export interface CollectionReview {citation:string;status:'unreviewed'|'reviewed'|'needs_context';note:string}
 export interface Collection {schemaVersion?:1|2|3;notes?:string;reviews?:CollectionReview[];id:string;revision:number;name:string;purpose?:string;requirements:string[];references:CollectionReference[];voice_examples:CollectionReference[];unresolved:string[];sensitive?:boolean}
@@ -71,8 +71,28 @@ export function appendFindPage(previous:EvidencePacket,page:EvidencePacket):Evid
  enrichment_discovery:{candidates:unique([...(previous.enrichment_discovery?.candidates||[]),...(page.enrichment_discovery?.candidates||[])],item=>item.record_id||item.citation||JSON.stringify(item))},
  omitted_references:unique([...(previous.omitted_references||[]),...(page.omitted_references||[])],item=>item.citation||`${item.stream}:${item.rank}`).filter(item=>!represented.has(item.citation||'')),
  requirement_checks:[...requirements.values()],
+ // Each page counts only what it withdrew; keep the search's total. Added records and
+ // the admitted limit stay reported once a page has said so.
+ continuation:page.continuation?{...page.continuation,
+  withdrawn:(previous.continuation?.withdrawn||0)+(page.continuation.withdrawn||0)||undefined,
+  added_since_first_page:page.continuation.added_since_first_page||previous.continuation?.added_since_first_page,
+  admitted_limit_reached:page.continuation.admitted_limit_reached||previous.continuation?.admitted_limit_reached}:previous.continuation,
  ...(page.source_discovery||previous.source_discovery?{source_discovery:{...(page.source_discovery||previous.source_discovery)!,candidates:unique([...(previous.source_discovery?.candidates||[]),...(page.source_discovery?.candidates||[])],item=>item.original_citation||`${item.document_id}@${item.version}:${item.content_hash}`)}}:{}),
  ...(page.retrieval_paths||previous.retrieval_paths?{retrieval_paths:{...(page.retrieval_paths||previous.retrieval_paths)!,paths:unique([...(previous.retrieval_paths?.paths||[]),...(page.retrieval_paths?.paths||[])],item=>JSON.stringify(item))}}:{})};
+}
+
+/** Plain notes about a continued search: records dropped or added since it began, and more matches than it kept. */
+export function continuationNotes(packet:EvidencePacket):string[]{
+ const continuation=packet.continuation;
+ if(!continuation)return [];
+ const notes:string[]=[];
+ const withdrawn=continuation.withdrawn||0;
+ if(withdrawn)notes.push(withdrawn===1?'1 match from this search is no longer available and was left out.'
+  :`${withdrawn} matches from this search are no longer available and were left out.`);
+ if(continuation.added_since_first_page)notes.push('New records were added after this search began. Search again to include them.');
+ // While more pages remain, Load more results is the next step; the limit matters at the end.
+ if(continuation.admitted_limit_reached&&!continuation.next_cursor)notes.push('More matches may be available. Narrow your question to see them.');
+ return notes;
 }
 
 /** A continuation assessment covers its page, never all accumulated candidates. */

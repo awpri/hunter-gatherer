@@ -300,3 +300,36 @@ def test_get_memory_serializes_one_snapshot_across_external_privacy_change(clien
     assert response.status_code == 200 and response.json()["text"] == "A formerly public note."
     assert "NEW PRIVATE TEXT" not in response.text
     assert client.get(f"/api/library/memories/{identity}").status_code == 404
+
+
+def test_correction_response_rechecks_current_visibility_before_rendering(client, store, monkeypatch):
+    identity = _memory(client, "The fictional ferry departs Friday.")
+    call = library._call
+
+    def tighten_after_correction(function, *args, **kwargs):
+        result = call(function, *args, **kwargs)
+        if function is library.tools.replace_memory:
+            def make_private(record):
+                record.metadata = {**record.metadata, "sensitive": True, "note": "fictional scheduling detail"}
+                return record
+            store.mutate(result["memory"]["id"], make_private)
+        return result
+
+    monkeypatch.setattr(library, "_call", tighten_after_correction)
+    response = client.post(f"/api/library/memories/{identity}/replace", json={"text": "The ferry departs Monday."})
+    assert response.status_code == 200
+    assert response.json()["replaced"] and response.json()["memory"] is None
+
+
+def test_http_correction_and_forget_retries_preserve_history(client, store):
+    identity = _memory(client, "The fictional ferry departs on Friday.")
+    body = {"text": "The ferry departs on Monday."}
+    url = f"/api/library/memories/{identity}"
+    first = client.post(f"{url}/replace", json=body).json()
+    again = client.post(f"{url}/replace", json=body).json()
+    assert again["replayed"] and again["memory"]["id"] == first["memory"]["id"]
+    assert client.post(f"{url}/forget", json={}).status_code == 409
+    assert store.get(identity).deleted_at is None
+    forget_url = f"/api/library/memories/{first['memory']['id']}/forget"
+    assert client.post(forget_url, json={}).json()["deleted"]
+    assert client.post(forget_url, json={}).json()["already_forgotten"]

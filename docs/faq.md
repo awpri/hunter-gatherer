@@ -107,6 +107,29 @@ Yes. `hunt ask "question" --library DIR --json` returns structured evidence;
 presentation only. Use `--server URL` to reuse an existing process. See the
 [terminal guide](cli.md) for limits and exit codes.
 
+## Can several assistants use the library at the same time?
+
+Yes. Connect them all to one running `hunt serve`, or let each start its own
+`hunt-mcp --library DIR` process. Changes to memories are atomic and ordered
+either way. If two assistants correct or forget the same memory, the second is
+told what happened and which record is current; it does not overwrite the first.
+Saving the same fact twice keeps one record.
+
+On a recognized local disk, readers can search while another process writes.
+Writers take turns. `hunt storage DIR` shows the journal mode h/g chose and
+the reason. A search keeps paging while others write. Start a fresh search to
+include records added after the first page.
+[Several assistants, one library](concurrency.md) has the details and
+measurements.
+
+## Can I serve one library to several people?
+
+h/g has no accounts or logins. An application that has them can route each
+person to their own library, or hand h/g an access policy that limits what a
+caller may read, change or import in a shared one. Flags that a model sets, such
+as `include_sensitive`, are requests and not permissions. See
+[Hosting](hosting.md).
+
 ## Is everything local?
 
 Personal libraries created by `hunt init` use local SQLite and an in-process
@@ -144,7 +167,7 @@ library; see [migration boundaries](roadmap.md#compatibility-and-migration).
 
 ## Is this a stable release?
 
-**0.1.0a2 is a public alpha**, distributed through GitHub release assets and a
+**0.1.0a3 is a public alpha**, distributed through GitHub release assets and a
 versioned source tag. There is no PyPI or Homebrew release yet. Check the exact
 release's notes and [packaged-install CI](https://github.com/awpri/hunter-gatherer/actions/workflows/packaged-demo.yml).
 Tests cover a defined source boundary and synthetic workflows; they do not

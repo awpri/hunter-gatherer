@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+import sqlite3
+from contextlib import suppress
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -36,6 +38,9 @@ class Harness:
     store: Any  # hunter_gatherer.memory.store.MemoryStore
     cost: Any  # hunter_gatherer.cost.CostTracker
     settings: Settings
+    # Limits a trusted host places on callers of this harness. None means the
+    # single-user default: nothing is restricted. See hunter_gatherer.access.
+    access_policy: Any = None
 
     @classmethod
     def build(cls, settings: Settings | None = None) -> Harness:
@@ -51,8 +56,14 @@ class Harness:
 
 
 def _store_identity(harness: Harness) -> dict:
+    from hunter_gatherer.access import effective_policy
+
     path = str(Path(harness.settings.sqlite_path).expanduser().resolve())
-    return {"id": hashlib.sha256(path.encode()).hexdigest()[:16], "database": path}
+    identity = {"id": hashlib.sha256(path.encode()).hexdigest()[:16]}
+    if effective_policy(harness).administer:
+        # Where the library lives on the server is the operator's business.
+        identity["database"] = path
+    return identity
 
 
 def _validated_tags(tags: list | None) -> list[str]:
@@ -62,12 +73,21 @@ def _validated_tags(tags: list | None) -> list[str]:
     return sorted(set(tags or []))
 
 
-def _validated_metadata(harness: Harness, metadata: dict | None, *, sensitive: bool = False) -> dict:
+def _validated_metadata(harness: Harness, metadata: dict | None, *, sensitive: bool = False,
+                        include_sensitive: bool = True) -> dict:
+    from hunter_gatherer.access import effective_policy
+
+    policy = effective_policy(harness)
     if metadata is not None and not isinstance(metadata, dict):
         raise ValueError("metadata must be an object")
     meta = json.loads(json.dumps(metadata or {}, allow_nan=False))
     if any(k in meta for k in ("superseded_by", "history", "valid_to", "deleted_at")):
         raise ValueError("History and supersession are managed through replace_memory, not metadata.")
+    if "recorded_by" in meta:
+        raise ValueError("recorded_by is set by the server from the authenticated caller, not by metadata.")
+    if policy.principal:
+        # The one authorship label a caller cannot choose for itself.
+        meta["recorded_by"] = policy.principal
     if meta.get("verification", "self_reported") not in {"self_reported", "verified", "inferred", "unverified"}:
         raise ValueError("verification must be self_reported, verified, inferred, or unverified")
     if meta.get("retention", "standard") not in {"standard", "permanent"}:
@@ -83,12 +103,14 @@ def _validated_metadata(harness: Harness, metadata: dict | None, *, sensitive: b
         raise ValueError("evidence_refs must be a list of document_id/chunk_id objects")
     if refs:
         from hunter_gatherer.memory.documents import DocumentArchive
-        archive = DocumentArchive(harness.store)
+        archive = DocumentArchive(harness.store, initialize_search=False)
         validated = []
         for ref in refs:
             if not ref.get("chunk_id"):
                 raise ValueError("Each evidence reference needs a chunk_id")
-            chunk = archive.get_chunk(ref["chunk_id"], include_sensitive=True)
+            # A caller who may not read sensitive sources may not cite them
+            # either: validating a quote would confirm what the source says.
+            chunk = archive.get_chunk(ref["chunk_id"], include_sensitive=policy.read_sensitive and include_sensitive)
             if not chunk or chunk.get("error") or not chunk.get("document_id"):
                 raise ValueError("Evidence chunk is unavailable")
             if ref.get("document_id") not in (None, chunk["document_id"]):
@@ -111,7 +133,7 @@ def _public_metadata(harness: Harness, mem, include_sensitive: bool = False) -> 
     refs = meta.get("evidence_refs")
     if isinstance(refs, list) and refs:
         from hunter_gatherer.memory.documents import DocumentArchive
-        archive = DocumentArchive(harness.store)
+        archive = DocumentArchive(harness.store, initialize_search=False)
         visible = []
         for ref in refs:
             if not isinstance(ref, dict):
@@ -136,7 +158,9 @@ def _memory_out(harness: Harness, mem, include_sensitive: bool = False) -> dict:
     return {"id": mem.id, "text": mem.text, "type": mem.type, "tags": mem.tags,
             "importance": mem.importance, "created_at": mem.created_at,
             "source": mem.source, "metadata": _public_metadata(harness, mem, include_sensitive),
-            "citation": f"[mem:{mem.id[:6]}]"}
+            # The whole ID, as Find and Open use. A six-character prefix stops
+            # resolving once another memory happens to share it.
+            "citation": f"[mem:{mem.id}]"}
 
 
 def status(harness: Harness) -> dict:
@@ -147,6 +171,7 @@ def status(harness: Harness) -> dict:
 
     return {"store": _store_identity(harness), "memory_count": harness.store.count(),
             "maintenance": maintenance(harness).snapshot(),
+            "concurrency": _concurrency_status(harness),
             "configured_vector_backend": harness.settings.vector_backend,
             "active_vector_backend": type(harness.store._backend).__name__,
             "local_only": harness.settings.local_only,
@@ -196,6 +221,38 @@ def status(harness: Harness) -> dict:
                              "procedure_experience": True, "protocol_features_version": "2026-10-09"},
             "retention": "Documents are permanent until explicitly forgotten. Facts can be marked permanent. Other memories may decay during consolidation.",
             "forget_semantics": "Recoverable removal from retrieval, not permanent erasure of database/audit/backups."}
+
+
+def _concurrency_status(harness: Harness) -> dict:
+    """What several clients can expect of this store, and how it has been coping.
+
+    Settings and counts only: no record IDs, text, queries or client names.
+    """
+    store = harness.store
+    with store._lock:
+        journal = str(store._sqlite.execute("PRAGMA journal_mode").fetchone()[0]).lower()
+        timeout = int(store._sqlite.execute("PRAGMA busy_timeout").fetchone()[0])
+    diagnostics = getattr(store, "write_diagnostics", None)
+    report = getattr(store, "storage_report", None)
+    storage = report() if report is not None else None
+    return {
+        "writes": "Each memory change is atomic and ordered across threads and processes. A write "
+                  "based on an outdated read is refused with error_code memory_conflict; nothing "
+                  "is overwritten.",
+        "this_process": "One operation at a time uses the store; others wait their turn.",
+        "other_processes": ("Readers and one writer proceed together (write-ahead log)." if journal == "wal"
+                            else "A writer waits for readers to finish and readers for the writer "
+                                 "(rollback journal)."),
+        "busy": f"A call waits up to {timeout // 1000} seconds for another process. After that it returns "
+                "error_code library_busy; repeat the call.",
+        "find_cursors": "Continue through other clients' writes. Later pages deliver the first page's admitted "
+                        "matches, each checked again; newer records need a new search.",
+        "journal_mode": journal, "busy_timeout_ms": timeout,
+        # Chosen by h/g from where the file lives; there is no setting. Kinds and names only, no paths.
+        "storage": ({key: storage[key] for key in ("location", "location_detail", "chosen", "explanation",
+                                                   "switch_pending", "warning")} if storage else None),
+        "since_start": diagnostics() if diagnostics is not None else None,
+    }
 
 
 def core_memory(harness: Harness, max_tokens: int = 512, include_sensitive: bool = False) -> dict:
@@ -274,25 +331,141 @@ def list_memories(harness: Harness, limit: int = 20, offset: int = 0,
             "next_offset": offset + limit if offset + limit < len(visible) else None}
 
 
-def replace_memory(harness: Harness, memory_id: str, text: str, metadata: dict | None = None) -> dict:
-    """Explicit whole-record correction with a stable link to the superseded record."""
+def _may_read_sensitive(harness: Harness) -> bool:
+    """Whether the host permits this caller to opt into sensitive reads."""
+    from hunter_gatherer.access import effective_policy
+
+    return effective_policy(harness).read_sensitive
+
+
+def _memory_conflict(harness: Harness, record, action: str, *, include_sensitive: bool = False) -> dict:
+    """Explain a write aimed at a record another decision already settled.
+
+    Nothing is changed. The caller learns what happened and, when a newer
+    active record exists and is visible to it, which one to look at next.
+    """
+    from hunter_gatherer.memory.retrieval_feedback import current_memory
+
+    done = "replaced" if action == "replace" else "deleted"
+    if record.deleted_at is not None:
+        return {done: False, "error_code": "memory_conflict",
+                "error": "This memory was forgotten, so it cannot be corrected. "
+                         "Save the corrected fact as a new memory if it should exist.",
+                "conflict": {"reason": "deleted", "memory_id": record.id}}
+    conflict = {"reason": "superseded", "memory_id": record.id}
+    head = harness.store.active_successor(record)
+    if head and current_memory(harness.store, head, include_sensitive) is not None:
+        conflict["current_id"] = head
+    step = ("Open the current record and correct that one if your change still applies."
+            if action == "replace" else
+            "Only an earlier version was targeted; open the current record and forget it if the fact itself should go.")
+    return {done: False, "error_code": "memory_conflict",
+            "error": "This memory was already replaced by a newer correction. " + step,
+            "conflict": conflict}
+
+
+def _write_target_state(harness, record, action, include_sensitive):
+    """Return the result of a write to a missing, hidden or already settled target."""
+    from hunter_gatherer.memory.retrieval_feedback import current_memory
+
+    # Deleted rows are inspected only to decide whether the caller can learn
+    # that this ID was forgotten. Check their sources and workspace too.
+    visible = record
+    if record is not None and record.deleted_at is not None:
+        visible = replace(record, deleted_at=None)
+    if visible is None or current_memory(
+        harness.store, visible.id, include_sensitive, include_superseded=True, memory=visible
+    ) is None:
+        return {"replaced" if action == "replace" else "deleted": False,
+                "error": "Memory not found or unavailable"}
+    if record.deleted_at is not None:
+        if action == "forget":
+            return {"deleted": True, "already_forgotten": True, "memory_id": record.id,
+                    "preview": None, "deletion_mode": "recoverable",
+                    "note": "Already removed from retrieval; nothing changed."}
+        return _memory_conflict(harness, record, action, include_sensitive=include_sensitive)
+    if record.is_superseded and action == "forget":
+        return _memory_conflict(harness, record, action, include_sensitive=include_sensitive)
+    return None
+
+
+def replace_memory(harness: Harness, memory_id: str, text: str, metadata: dict | None = None,
+                   *, include_sensitive: bool | None = None) -> dict:
+    """Correct a visible record or acknowledge a retry of the same correction."""
     from hunter_gatherer.memory.evidence import is_sensitive_memory
-    from hunter_gatherer.memory.schemas import Memory
-    old = harness.store.get(memory_id)
-    if old is None or not old.is_retrievable():
-        return {"replaced": False, "error": "Active memory not found"}
-    if not text.strip() or len(text) > 50_000:
+    from hunter_gatherer.memory.library_health import _read_snapshot
+    from hunter_gatherer.memory.retrieval_feedback import current_memory
+    from hunter_gatherer.memory.schemas import PROTECTIVE_FLAGS, Memory, MemoryConflictError
+
+    # Legacy single-purpose calls target an exact ID under the trusted host policy.
+    # The public six-tool facade and REST always supply the caller's actual opt-in.
+    allowed = _may_read_sensitive(harness) and include_sensitive is not False
+    if not isinstance(text, str) or not text.strip() or len(text) > 50_000:
         raise ValueError("Replacement must contain 1–50,000 characters")
-    # New wording needs its own evidence. Never silently reuse citations that may
-    # support only the superseded claim. Other organization/retention fields persist.
-    meta = {k: v for k, v in old.metadata.items()
-            if k not in {"evidence_refs", "verification", "history", "valid_to", "superseded_by"}}
-    meta.update(metadata or {})
-    meta = _validated_metadata(harness, meta, sensitive=is_sensitive_memory(old, harness.store))
-    new = Memory(text=text, type=old.type, importance=old.importance, source="mcp:correction",
-                 tags=list(old.tags), metadata={**meta, "supersedes": old.id})
-    new = harness.store.supersede(old.id, new)
-    return {"replaced": True, "previous_id": old.id, "memory": _memory_out(harness, new, include_sensitive=True)}
+    if metadata is not None and not isinstance(metadata, dict):
+        raise ValueError("metadata must be an object")
+
+    for _attempt in range(3):
+        old = harness.store.get(memory_id)
+        settled = _write_target_state(harness, old, "replace", allowed)
+        if settled is not None:
+            return settled
+        # New wording needs its own evidence. Organization/retention survives,
+        # and the host supplies the author of this correction.
+        meta = {k: v for k, v in old.metadata.items()
+                if k not in {"evidence_refs", "verification", "history", "valid_to", "superseded_by",
+                             "recorded_by"}}
+        meta.update(metadata or {})
+        meta = _validated_metadata(harness, meta, sensitive=is_sensitive_memory(old, harness.store),
+                                   include_sensitive=allowed)
+        for key in PROTECTIVE_FLAGS:
+            if old.metadata.get(key) and not meta.get(key):
+                meta[key] = old.metadata[key]
+        meta["supersedes"] = old.id
+        if old.is_superseded:
+            with _read_snapshot(harness.store):
+                old = harness.store.get(memory_id)
+                settled = _write_target_state(harness, old, "replace", allowed)
+                if settled is not None:
+                    return settled
+                if not old.is_superseded:
+                    continue
+                successor_id = old.metadata["superseded_by"]
+                successor = current_memory(harness.store, successor_id, allowed) if isinstance(successor_id, str) else None
+                if (successor is not None and successor.source == "mcp:correction"
+                        and successor.text == text and successor.metadata == meta):
+                    return {"replaced": True, "replayed": True, "previous_id": old.id,
+                            "memory": _memory_out(harness, successor, include_sensitive=allowed)}
+                return _memory_conflict(harness, old, "replace", include_sensitive=allowed)
+        new = Memory(text=text, type=old.type, importance=old.importance, source="mcp:correction",
+                     tags=list(old.tags), metadata=meta)
+
+        def still_eligible(current, replacement=new):
+            # A document or workspace can change without affecting the memory's
+            # row token. The store runs this check within the write transaction.
+            if current_memory(harness.store, current.id, allowed, memory=current) is None:
+                return False
+            if is_sensitive_memory(current, harness.store) and not replacement.metadata["sensitive"]:
+                return False
+            if replacement.metadata.get("evidence_refs"):
+                references = Memory(id=replacement.id, metadata={"evidence_refs": replacement.metadata["evidence_refs"]})
+                if current_memory(harness.store, references.id, allowed, memory=references) is None:
+                    return False
+                if is_sensitive_memory(references, harness.store) and not replacement.metadata["sensitive"]:
+                    return False
+            return True
+
+        try:
+            new = harness.store.supersede(old.id, new, expected=old, guard=still_eligible)
+        except MemoryConflictError:
+            continue  # Recheck both visibility and state before deciding what the caller may see.
+        with _read_snapshot(harness.store):
+            visible = current_memory(harness.store, new.id, allowed)
+            return {"replaced": True, "previous_id": old.id,
+                    "memory": _memory_out(harness, visible, include_sensitive=allowed) if visible else None}
+    return {"replaced": False, "error_code": "memory_conflict",
+            "error": "This memory kept changing while the correction was prepared. Read it again and retry.",
+            "conflict": {"reason": "changed", "memory_id": memory_id}}
 
 
 def ingest_document(harness: Harness, path: str, title: str = "", author: str = "",
@@ -561,13 +734,26 @@ def remember(harness: Harness, text: str, memory_type: str = "semantic", importa
         from hunter_gatherer.memory.schemas import ConsolidationDecision
         decision = ConsolidationDecision(op="ADD", target_id=decision.target_id,
                                          reason="possible correction retained for explicit review")
-    stored = cons.apply(mem, decision)
-    return {
+    # Report what was actually done: the matched record may have been
+    # forgotten or corrected by another agent since the check above.
+    stored, decision = cons.resolve(mem, decision)
+    result = {
         "stored": stored is not None,
         "decision": decision.op,
         "reason": decision.reason,
         "id": stored.id if stored else None,
     }
+    if decision.op == "NOOP" and decision.target_id:
+        # Tell a retrying or second agent which record already holds this
+        # fact. Only when that reveals nothing new: the wording is identical,
+        # or the record is readable without a sensitive opt-in.
+        from hunter_gatherer.memory.retrieval_feedback import current_memory
+
+        existing = harness.store.get(decision.target_id)
+        if existing is not None and existing.is_retrievable() and (
+                existing.text == text or current_memory(harness.store, existing.id) is not None):
+            result["duplicate_of"] = existing.id
+    return result
 
 
 def search(harness: Harness, query: str, top_k: int = 8, include_sensitive: bool = False) -> dict:
@@ -606,36 +792,54 @@ def profile(harness: Harness, query: str = "", top_k: int = 8, include_sensitive
     return build_profile(harness, query, top_k, include_sensitive, max_tokens)
 
 
-def forget(harness: Harness, memory_id: str = "", query: str = "") -> dict:
+def forget(harness: Harness, memory_id: str = "", query: str = "", *,
+           include_sensitive: bool | None = None) -> dict:
     """Explicitly delete a memory. Pass `memory_id` for a direct delete, or
     `query` to search and delete the top match. Returns what was deleted.
-    Use for privacy / correctness cleanup ("forget that fact")."""
+    Use for privacy / correctness cleanup ("forget that fact").
+
+    Forgetting is repeatable: a second request for the same ID (a retry, or
+    another agent) reports ``already_forgotten`` and changes nothing.
+    ``include_sensitive`` is supplied by the library facade, never by a client.
+    """
+    from hunter_gatherer.memory.evidence import is_sensitive_memory
+
     if not memory_id and not query:
         return {"deleted": False, "error": "Provide memory_id or query."}
 
     target_id = memory_id
-    preview = None
     if not target_id:
         # Resolve the top search hit to an id.
         hits = harness.store.vector_search(query, top_k=1)
         if not hits:
             return {"deleted": False, "query": query, "error": "no matching memory found"}
         target_id = hits[0].id
-        preview = hits[0].payload.get("preview", "")[:160]
 
-    # Confirm the memory exists (delete is a no-op on a missing id).
-    rows = harness.store._sqlite.execute(  # noqa: SLF001
-        "SELECT text FROM memories WHERE id = ?", (target_id,)
-    ).fetchall()
-    if not rows:
-        return {"deleted": False, "memory_id": target_id, "error": "not found"}
-    preview = preview or (rows[0][0][:160] if rows[0][0] else "")
-    harness.store.delete(target_id)
+    from hunter_gatherer.memory.retrieval_feedback import current_memory
+    from hunter_gatherer.memory.schemas import MemoryConflictError
+
+    allowed = _may_read_sensitive(harness) and include_sensitive is not False
+    record = harness.store.get(target_id)
+    settled = _write_target_state(harness, record, "forget", allowed)
+    if settled is not None:
+        return settled
+    try:
+        forgotten = harness.store.delete(target_id, expected=record, guard=lambda current: current_memory(
+            harness.store, current.id, allowed, memory=current) is not None)
+    except MemoryConflictError:
+        forgotten = False
+    if not forgotten:
+        settled = _write_target_state(harness, harness.store.get(target_id), "forget", allowed)
+        if settled is not None:
+            return settled
+        return {"deleted": False, "error_code": "memory_conflict",
+                "error": "This memory changed before it could be forgotten. Read it again and retry.",
+                "conflict": {"reason": "changed", "memory_id": target_id}}
     return {
         "deleted": True,
         "memory_id": target_id,
         "query": query or None,
-        "preview": preview,
+        "preview": record.text[:160] if include_sensitive or not is_sensitive_memory(record, harness.store) else None,
         "deletion_mode": "recoverable",
         "note": "Removed from retrieval. Original text remains in the database and backups; this is not permanent erasure.",
     }
@@ -1295,6 +1499,16 @@ def get_description(name: str) -> str:
     return _DESCRIPTIONS[name]
 
 
+def library_busy(error: BaseException) -> bool:
+    """True when SQLite gave up waiting for another process's lock on the database file."""
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    code = getattr(error, "sqlite_errorcode", None)
+    if code is not None:
+        return code & 0xFF == sqlite3.SQLITE_BUSY  # includes the extended busy codes
+    return "database is locked" in str(error)
+
+
 def call_tool(harness: Harness, name: str, arguments: dict) -> dict:
     """Dispatch a tool call. Raises KeyError for unknown tool, ValueError for
     bad args. Returns a dict; page-image results carry private PNG bytes for
@@ -1302,14 +1516,38 @@ def call_tool(harness: Harness, name: str, arguments: dict) -> dict:
     handler = _HANDLERS.get(name)
     if handler is None:
         raise KeyError(f"unknown tool: {name}")
-    def dispatch():
-        result = handler(harness, **arguments)
-        result.setdefault("store", _store_identity(harness))
-        return result
+    if "include_sensitive" in arguments and type(arguments["include_sensitive"]) is not bool:
+        raise ValueError("include_sensitive must be a boolean")
+    from hunter_gatherer.access import dispatching
 
-    from hunter_gatherer.memory.library_activity import observe_call
-    return observe_call(harness, name.removeprefix("hg_"), dispatch,
-                        origin="agent", arguments=arguments)
+    with dispatching(harness) as denial:
+        refusal = denial(name, arguments) if denial is not None else None
+        if refusal is not None:
+            # Decided from the host's policy before anything is read or
+            # observed. Arguments cannot change the outcome.
+            return {"error": refusal, "error_code": "access_denied", "store": _store_identity(harness)}
+
+        def dispatch():
+            result = handler(harness, **arguments)
+            result.setdefault("store", _store_identity(harness))
+            return result
+
+        from hunter_gatherer.memory.library_activity import observe_call
+        try:
+            return observe_call(harness, name.removeprefix("hg_"), dispatch,
+                                origin="agent", arguments=arguments)
+        except sqlite3.OperationalError as exc:
+            if not library_busy(exc):
+                raise
+            # Another process kept the database file for longer than a call waits.
+            return {"error": "The library is busy with another client's work, so this call did not "
+                             "finish. Repeat it in a moment.",
+                    "error_code": "library_busy", "retryable": True, "store": _store_identity(harness)}
+        finally:
+            settle = getattr(harness.store, "settle", None)
+            if settle is not None:
+                with suppress(Exception):
+                    settle()
 
 
 def serialize_result(result: dict) -> str:

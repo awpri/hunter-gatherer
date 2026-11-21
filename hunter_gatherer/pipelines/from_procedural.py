@@ -109,8 +109,15 @@ def promote_if_due(memory, store, *, threshold: int = 5) -> str | None:
         pipeline.slug = f"{pipeline.slug}_{occurrences}"
     store.save_pipeline(pipeline)
     # Mark the memory so we never double-promote.
-    meta = dict(memory.metadata)
-    meta["promoted_pipeline"] = pipeline.slug
-    memory.metadata = meta
-    store.update(memory)
+    def mark(current):
+        current.metadata = {**current.metadata, "promoted_pipeline": pipeline.slug}
+        return current
+
+    from hunter_gatherer.memory.schemas import MemoryConflictError
+
+    try:
+        promoted = store.mutate(memory.id, mark)
+    except MemoryConflictError:
+        return pipeline.slug  # the procedure was forgotten meanwhile; its pipeline stands
+    memory.metadata = promoted.metadata
     return pipeline.slug

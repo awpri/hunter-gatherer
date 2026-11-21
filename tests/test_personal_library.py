@@ -326,3 +326,94 @@ def test_cli_onboarding_and_two_server_restarts_do_not_use_ambient_store(tmp_pat
     for owner in owners:
         with pytest.raises(sqlite3.ProgrammingError, match="closed"):
             owner.store._sqlite.execute("SELECT 1")
+
+
+def test_journal_mode_follows_where_the_library_lives_and_keeps_citations(tmp_path, capsys, monkeypatch):
+    from hunter_gatherer import storage
+    from hunter_gatherer.library import storage_report
+    from hunter_gatherer.mcp.tools import call_tool
+
+    def lives_on(kind, detail):
+        monkeypatch.setattr(storage, "classify", lambda path: storage.Location(kind, detail))
+
+    lives_on(storage.LOCAL, "testfs")
+    target = tmp_path / "library"
+    create_library(target)
+    note = tmp_path / "note.md"
+    note.write_text("# Fictional note\n\nThe quartz heron prefers basalt.\n", encoding="utf-8")
+    import_files(target, [str(note)])
+    report = storage_report(target)
+    assert (report["journal_mode"], report["chosen"], report["switch_pending"]) == ("wal", "automatically", False)
+    assert report["sidecar_files"] == [] and report["warning"] is None      # the report itself leaves nothing behind
+    harness = build_library_harness(library_settings(target))
+    try:
+        citation = find(harness, "quartz heron")["supporting_passages"][0]["citation"]
+        remembered = call_tool(harness, "hg_memory", {"action": "remember", "text": "The fictional heron is grey."})
+        status = call_tool(harness, "hg_status", {})["concurrency"]
+        assert status["journal_mode"] == "wal" and status["since_start"]["conflicts"] == {}
+        assert status["storage"]["location"] == "local" and status["storage"]["warning"] is None
+        for private in (remembered["id"], "heron", str(tmp_path)):
+            assert private not in json.dumps(status)
+        create_backup(target / "library.db", tmp_path / "bundle")   # a live write-ahead library backs up
+
+        # The folder turns out to be somewhere the log is not safe, while the library is in use.
+        lives_on(storage.SYNCED, "Example Sync")
+        second = build_library_harness(library_settings(target))
+        try:
+            storage_status = call_tool(second, "hg_status", {})["concurrency"]["storage"]
+            assert storage_status["switch_pending"] and "Example Sync" in storage_status["explanation"]
+            assert "synchronized folder" in storage_status["warning"]
+            assert find(second, "quartz heron")["supporting_passages"][0]["citation"] == citation
+        finally:
+            second.loop.close()
+    finally:
+        harness.loop.close()
+
+    # With nothing else connected the next opening switches it. Records and citations are untouched.
+    harness = build_library_harness(library_settings(target))
+    try:
+        assert call_tool(harness, "hg_status", {})["concurrency"]["journal_mode"] == "delete"
+        assert find(harness, "quartz heron")["supporting_passages"][0]["citation"] == citation
+        assert harness.store.get(remembered["id"]).text == "The fictional heron is grey."
+    finally:
+        harness.loop.close()
+    report = storage_report(target)
+    assert (report["journal_mode"], report["switch_pending"], report["sidecar_files"]) == ("delete", False, [])
+
+    lives_on(storage.LOCAL, "testfs")
+    restored = tmp_path / "restored"
+    create_library(restored, from_backup=tmp_path / "bundle")
+    report = storage_report(restored)                       # a restored file starts with the rollback journal
+    assert report["journal_mode"] == "delete" and report["switch_pending"]
+    harness = build_library_harness(library_settings(restored))
+    try:
+        assert harness.store.storage_report()["journal_mode"] == "wal"    # and is switched when first opened
+        assert find(harness, "quartz heron")["supporting_passages"][0]["citation"] == citation
+        assert harness.store.get(remembered["id"]).text == "The fictional heron is grey."
+    finally:
+        harness.loop.close()
+
+    capsys.readouterr()
+    assert cli.main(["storage", str(restored), "--json"]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["journal_mode"] == "wal" and shown["location"] == "local" and str(tmp_path) not in json.dumps(shown)
+    assert cli.main(["storage", str(restored)]) == 0
+    assert "Journal mode: wal (chosen automatically)" in capsys.readouterr().out
+    assert cli.main(["storage", str(tmp_path / "not-a-library")]) == 1
+    with pytest.raises(SystemExit):                          # there is no switch to set by hand
+        cli.main(["storage", str(restored), "--journal", "wal"])
+
+
+def test_init_warns_about_a_synchronized_folder_without_changing_its_output(tmp_path, capsys, monkeypatch):
+    from hunter_gatherer import storage
+
+    monkeypatch.setattr(storage, "classify", lambda path: storage.Location(storage.SYNCED, "Example Sync"))
+    assert cli.main(["init", str(tmp_path / "library"), "--json"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["database"] == "library.db"          # still only the manifest
+    assert "Warning: A live library in a synchronized folder" in captured.err
+    assert storage.file_journal_mode(tmp_path / "library" / "library.db") == "delete"
+
+    monkeypatch.setattr(storage, "classify", lambda path: storage.Location(storage.LOCAL, "testfs"))
+    assert cli.main(["init", str(tmp_path / "local"), "--json"]) == 0
+    assert "Warning" not in capsys.readouterr().err

@@ -372,6 +372,9 @@ def build_evidence_packet(
     retrieval_offsets: dict[str, int] | None = None,
     retrieval_continuation: bool = False,
     contextual_requirements: bool = False,
+    prepared_archive=None,
+    admitted_limit: int = 0,
+    admitted: dict[str, list[str]] | None = None,
 ) -> dict:
     """Retrieve attributed memories and passages for a general question or task.
 
@@ -395,7 +398,25 @@ def build_evidence_packet(
     ``include_context=False`` preserves exact quotes and citations but skips
     surrounding text; affected passages carry ``context_omitted=True``.
     ``include_sensitive`` is an explicit per-request opt-in, not a saved setting.
+    ``prepared_archive`` is the result of :func:`prepare_evidence_search`, for a
+    caller that reads this packet inside a wider read snapshot of its own.
+    With ``retrieval_offsets``, ``admitted_limit`` adds to ``retrieval_page``
+    the citations of the first that many ranked memories, passages and catalog
+    leads (``ranked``) and whether each ranking ended within them.
+    ``admitted`` instead builds the page from such earlier lists, in order:
+    the next ``top_k`` of each that are still visible now, without ranking
+    again. ``retrieval_page`` then names the delivered ``window`` and the
+    ``withdrawn`` citations, those no longer visible.
     """
+    if admitted is not None and (
+            retrieval_offsets is not None or admitted_limit or not isinstance(admitted, dict)
+            or set(admitted) != {"memories", "passages", "catalog"}
+            or any(not isinstance(values, list) or any(not isinstance(v, str) for v in values)
+                   for values in admitted.values())):
+        raise ValueError("admitted must list memories, passages and catalog citations, without offsets")
+    if type(admitted_limit) is not int or not 0 <= admitted_limit <= 1024 or (
+            admitted_limit and retrieval_offsets is None):
+        raise ValueError("admitted_limit must be an integer from 0 to 1024 and requires retrieval_offsets")
     if retrieval_offsets is not None:
         if not isinstance(retrieval_offsets, dict) or set(retrieval_offsets) - {"memories", "passages", "catalog"}:
             raise ValueError("retrieval_offsets must contain only memories, passages and catalog")
@@ -449,34 +470,16 @@ def build_evidence_packet(
 
     with store._lock:
         db = store._sqlite
-        owns_snapshot = not db.in_transaction
-        # New-store schema setup must precede our rollback-only read boundary.
-        archive = EvidenceArchive(store, initialize_search=False)
-        if include_global:
-            if owns_snapshot:
-                archive = EvidenceArchive(store)
-                if store.settings.archive_search_policy == "bounded":
-                    tables = {row[0] for row in db.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    )}
-                    dirty = "archive_rank_dirty" not in tables or any(
-                        db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
-                        for table in (("archive_rank_dirty",) if lexical_only else ("archive_rank_dirty", "archive_vector_dirty"))
-                        if table in tables
-                    )
-                    if dirty:
-                        from hunter_gatherer.memory.bounded_retrieval import prepare_index
-                        prepare_index(archive, **({"lexical_only": True} if lexical_only else {}))
-                elif archive._native_vectors and not lexical_only:
-                    fingerprint = archive._fingerprint()
-                    if isinstance(fingerprint, str) and fingerprint and not fingerprint.startswith("hash"):
-                        document_search.sync_vectors(db)
-            else:
+        if prepared_archive is not None:
+            archive = prepared_archive
+        elif not db.in_transaction:
+            archive = prepare_evidence_search(store, include_global=include_global,
+                                              lexical_only=lexical_only, source_discovery=source_discovery)
+        else:
+            archive = EvidenceArchive(store, initialize_search=False)
+            if include_global:
                 # Connection-local extension loading preserves caller ownership.
                 archive._native_vectors = False if lexical_only else document_search.load_vec(db)
-        if source_discovery and include_global and owns_snapshot:
-            from hunter_gatherer.memory.catalog_index import prepare_catalog_index
-            prepare_catalog_index(store)
         with _read_snapshot(store), archive.reuse_parent_context(include_context=include_context):
             packet = _assemble_evidence_packet(
                 store, archive, query, top_k, include_sensitive, fields,
@@ -491,11 +494,82 @@ def build_evidence_packet(
                 document_relevance_policy=document_relevance_policy,
                 retrieval_offsets=retrieval_offsets, retrieval_continuation=retrieval_continuation,
                 contextual_requirements=contextual_requirements,
+                admitted_limit=admitted_limit, admitted=admitted,
             )
             from hunter_gatherer.memory.archive_coverage import archive_coverage
             packet["archive_coverage"] = archive_coverage(
                 store, include_sensitive=include_sensitive, include_global=include_global, query=query)
             return packet
+
+
+def prepare_evidence_search(store, *, include_global: bool = True, lexical_only: bool = False,
+                            source_discovery: bool = False):
+    """Bring derived search indexes up to date and return the archive to read.
+
+    This is the only part of an evidence read that may write. Call it with no
+    transaction open, before the read snapshot the packet is assembled in.
+    """
+    from hunter_gatherer.memory import document_search
+    from hunter_gatherer.memory.evidence_archive import EvidenceArchive
+
+    with store._lock:
+        db = store._sqlite
+        # New-store schema setup must precede our rollback-only read boundary.
+        archive = EvidenceArchive(store, initialize_search=False)
+        if include_global:
+            archive = EvidenceArchive(store)
+            if store.settings.archive_search_policy == "bounded":
+                tables = {row[0] for row in db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )}
+                dirty = "archive_rank_dirty" not in tables or any(
+                    db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
+                    for table in (("archive_rank_dirty",) if lexical_only else ("archive_rank_dirty", "archive_vector_dirty"))
+                    if table in tables
+                )
+                if dirty:
+                    from hunter_gatherer.memory.bounded_retrieval import prepare_index
+                    prepare_index(archive, **({"lexical_only": True} if lexical_only else {}))
+            elif archive._native_vectors and not lexical_only:
+                fingerprint = archive._fingerprint()
+                if isinstance(fingerprint, str) and fingerprint and not fingerprint.startswith("hash"):
+                    document_search.sync_vectors(db)
+        if source_discovery and include_global:
+            from hunter_gatherer.memory.catalog_index import prepare_catalog_index
+            prepare_catalog_index(store)
+        return archive
+
+
+def _admitted_passages(archive, query, citations, top_k, include_sensitive, withdrawn, signals):
+    """The next ``top_k`` admitted passages still visible now, in admitted order.
+
+    Visibility is checked by ID first, so withdrawn passages are never read.
+    The window is then hydrated and scored as a search would score it.
+    Citations of passages no longer visible are appended to ``withdrawn``.
+    """
+    parsed = {}
+    for citation in citations:
+        match = re.fullmatch(r"\[doc:([^#]+)#(.+)\]", citation)
+        parsed[citation] = (match[1], match[2]) if match else None
+    visible = archive.visible_chunks([ids[1] for ids in parsed.values() if ids], include_sensitive)
+    window = []
+    for citation in citations:
+        if len(window) == top_k:
+            break
+        ids = parsed[citation]
+        if ids is None or visible.get(ids[1]) != ids[0]:
+            withdrawn.append(citation)
+        else:
+            window.append(citation)
+    search = {"query": query, "hits": [], "total": 0, "warnings": []}
+    if window:
+        search = archive.score_chunks(query, [parsed[citation][1] for citation in window],
+                                      include_sensitive, **signals)
+        # A chunk whose stored text no longer matches its source is not delivered.
+        scored = {hit["citation"] for hit in search["hits"]}
+        withdrawn.extend(citation for citation in window if citation not in scored)
+    search["candidate_selection"] = {"policy": "admitted_by_first_page"}
+    return search
 
 
 def _assemble_evidence_packet(
@@ -505,7 +579,7 @@ def _assemble_evidence_packet(
     explain_document_matches=False,
     document_relevance_policy="legacy",
     retrieval_offsets=None, retrieval_continuation=False,
-    contextual_requirements=False,
+    contextual_requirements=False, admitted_limit=0, admitted=None,
 ):
     """Assemble main, requirement, and provenance reads in one snapshot."""
     query_tokens = _tokens(query)
@@ -531,9 +605,22 @@ def _assemble_evidence_packet(
             if current_memory(store, memory.id, include_sensitive, memory=memory) is None:
                 continue
         eligible.append(memory)
-    semantic, semantic_warnings = ({}, []) if lexical_only else _semantic_relevances(store, query, eligible, top_k)
+    # An admitted page delivers the next records an earlier ranking chose, if
+    # they are still eligible now; only those are scored, for their signals.
+    considered, withdrawn = eligible, {"memories": [], "passages": [], "catalog": []}
+    if admitted is not None:
+        current, considered = {memory.id: memory for memory in eligible}, []
+        for citation in admitted["memories"]:
+            if len(considered) == top_k:
+                break
+            memory = current.get(citation[len("[mem:"):-1]) if citation.startswith("[mem:") else None
+            if memory is None:
+                withdrawn["memories"].append(citation)
+            else:
+                considered.append(memory)
+    semantic, semantic_warnings = ({}, []) if lexical_only else _semantic_relevances(store, query, considered, top_k)
     ranked = []
-    for memory in eligible:
+    for memory in considered:
         if lexical_only:
             matches = sorted(query_tokens & set(lexical_tokens(_metadata_search_text(memory))))
             score = len(matches) / len(query_tokens) if query_tokens else 0.0
@@ -542,9 +629,10 @@ def _assemble_evidence_packet(
         semantic_score = semantic.get(memory.id, 0)
         if semantic_score > score:
             score = semantic_score
-        if score > 0:
+        if score > 0 or admitted is not None:
             ranked.append((score, memory, matches))
-    ranked.sort(key=lambda item: (-item[0], item[1].id))
+    if admitted is None:
+        ranked.sort(key=lambda item: (-item[0], item[1].id))
 
     memory_offset = retrieval_offsets["memories"] if retrieval_offsets is not None else 0
     passage_offset = retrieval_offsets["passages"] if retrieval_offsets is not None else 0
@@ -576,12 +664,17 @@ def _assemble_evidence_packet(
     search_query = query if document_query_strategy == "original" else " ".join(sorted(expanded_terms)) or query
     from hunter_gatherer.memory.retrieval_context import register_query_variant
     register_query_variant(query, search_query)
-    search = (archive.search(search_query, top_k=top_k, include_sensitive=include_sensitive,
-                             **({"relevance_policy": document_relevance_policy} if document_relevance_policy != "legacy" else {}),
-                             **({"explain": True} if explain_document_matches else {}),
-                             **({"lexical_only": True} if lexical_only else {}),
-                             **({"offset": passage_offset} if retrieval_offsets is not None else {}))
-              if include_global else {"hits": [], "warnings": []})
+    signals = {**({"relevance_policy": document_relevance_policy} if document_relevance_policy != "legacy" else {}),
+               **({"explain": True} if explain_document_matches else {}),
+               **({"lexical_only": True} if lexical_only else {})}
+    if admitted is not None and include_global:
+        search = _admitted_passages(archive, search_query, admitted["passages"], top_k, include_sensitive,
+                                    withdrawn["passages"], signals)
+    else:
+        search = (archive.search(search_query, top_k=top_k, include_sensitive=include_sensitive, **signals,
+                                 **({"offset": passage_offset} if retrieval_offsets is not None else {}),
+                                 **({"ranked_limit": admitted_limit} if admitted_limit else {}))
+                  if include_global else {"hits": [], "warnings": []})
     if not include_global:
         linked = {h["chunk_id"]: h for memory in memories for h in memory["provenance"]["sources"]}
         linked_hits = list(linked.values())
@@ -669,7 +762,9 @@ def _assemble_evidence_packet(
         select_requirements,
         source_families,
     )
-    if selection_strategy == "requirements" and requirements:
+    # An admitted page delivers what the first page admitted, including its
+    # requirement leads; fresh requirement candidates are reported, not mixed in.
+    if selection_strategy == "requirements" and requirements and admitted is None:
         memories = select_requirements(memories, requirement_packets, "relevant_memories", top_k)
         passages = select_requirements(passages, requirement_packets, "supporting_passages", top_k)
         if retrieval_offsets is not None:
@@ -734,6 +829,19 @@ def _assemble_evidence_packet(
                 "base_citations": base,
                 "represented_base_citations": [citation for citation in base if citation in represented],
             }
+        if admitted_limit:
+            listed = {"memories": ([f"[mem:{memory.id}]" for _, memory, _ in ranked[:admitted_limit]],
+                                   len(ranked) <= admitted_limit),
+                      # A search that returned no list (no matches) ranked nothing beyond its page.
+                      "passages": (search.pop("ranked_citations", base_passage_citations),
+                                   search.pop("ranked_complete", not search.get("has_more", False)))}
+            for name, (citations, complete) in listed.items():
+                result["retrieval_page"][name].update(ranked=citations, ranked_complete=complete)
+    elif admitted is not None:
+        result["retrieval_page"] = {
+            "memories": {"window": [item["citation"] for item in memories], "withdrawn": withdrawn["memories"]},
+            "passages": {"window": [item["citation"] for item in passages], "withdrawn": withdrawn["passages"]},
+        }
     if lexical_only:
         result["retrieval"]["lexical_only"] = True
         result["retrieval"]["method"] = "token matching in eligible memories and document text/metadata; semantic and topic expansion disabled"
@@ -757,13 +865,20 @@ def _assemble_evidence_packet(
             store, eligible, candidates, include_sensitive=include_sensitive)
 
     if source_discovery:
-        if include_global:
+        if include_global and admitted is not None:
+            from hunter_gatherer.memory.document_discovery import admitted_documents
+
+            result["source_discovery"], withdrawn["catalog"] = admitted_documents(
+                store, queries=[query, *requirements], citations=admitted["catalog"],
+                limit=min(top_k, 8), include_sensitive=include_sensitive)
+        elif include_global:
             from hunter_gatherer.memory.document_discovery import discover_documents
 
             result["source_discovery"] = discover_documents(
                 store, queries=[query, *requirements], limit=min(top_k, 8),
                 include_sensitive=include_sensitive,
                 **({"offset": retrieval_offsets["catalog"]} if retrieval_offsets is not None else {}),
+                **({"ranked_limit": admitted_limit} if admitted_limit else {}),
             )
         else:
             result["source_discovery"] = {
@@ -780,6 +895,14 @@ def _assemble_evidence_packet(
             "next_offset": offset + len(base) if has_more else None,
             "base_citations": base, "represented_base_citations": list(base),
         }
+        if admitted_limit:
+            result["retrieval_page"]["catalog"].update(
+                ranked=discovery.pop("ranked_citations", base),
+                ranked_complete=discovery.pop("ranked_complete", not has_more))
+    elif admitted is not None:
+        result["retrieval_page"]["catalog"] = {
+            "window": [item["original_citation"] for item in result.get("source_discovery", {}).get("candidates", [])],
+            "withdrawn": withdrawn["catalog"]}
 
     if enrichment_discovery:
         if include_global:

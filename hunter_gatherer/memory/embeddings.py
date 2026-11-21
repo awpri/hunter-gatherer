@@ -23,6 +23,7 @@ import importlib.util
 import math
 import re
 import threading
+from array import array
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -75,7 +76,15 @@ class SentenceTransformerEmbedder:
     fallback. For dense-only models it returns None.
     """
 
-    _CACHE_LIMIT = 512
+    # Find scores each candidate memory by its description while it holds the
+    # store lock. A cache smaller than the library forgets those descriptions
+    # between searches, so every search runs the model on them again. This size
+    # holds the descriptions of a library of several thousand memories. Vectors
+    # are float32 arrays: about 1.8 KB each at 384 dimensions, 28 MiB when full.
+    _CACHE_LIMIT = 16_384
+    # Repeating a text is nearly free. Callers that are about to take a shared
+    # lock can therefore embed their query first and reuse it inside the lock.
+    caches_by_text = True
 
     def __init__(self, model_name: str, *, local_files_only: bool = False):
         self._model_name = model_name
@@ -84,8 +93,9 @@ class SentenceTransformerEmbedder:
         self.dim = 0
         self._supports_sparse = False  # set on _load
         self._inference_lock = threading.RLock()
-        # Instance/model-scoped LRU: hashes and immutable floats, never prose.
-        self._dense_cache: OrderedDict[bytes, tuple[float, ...]] = OrderedDict()
+        # Instance/model-scoped LRU of text hash -> vector, never prose. The
+        # arrays never leave the cache; callers receive fresh lists.
+        self._dense_cache: OrderedDict[bytes, array] = OrderedDict()
 
     def _load(self):
         with self._inference_lock:
@@ -155,7 +165,7 @@ class SentenceTransformerEmbedder:
                 encoded = model.encode(list(missing.values()), normalize_embeddings=True,
                                        convert_to_numpy=True, show_progress_bar=False)
                 for key, vector in zip(missing, encoded, strict=True):
-                    values = tuple(float(value) for value in vector.tolist())
+                    values = _compact(vector.tolist())
                     vectors[key] = values
                     self._dense_cache[key] = values
                     self._dense_cache.move_to_end(key)
@@ -163,7 +173,7 @@ class SentenceTransformerEmbedder:
                         self._dense_cache.popitem(last=False)
             # Batch-local vectors survive eviction for batches larger than the
             # LRU. Independent lists isolate caller mutation and duplicate rows.
-            return [list(vectors[key]) for key in keys]
+            return [vectors[key].tolist() for key in keys]
 
     def embed_sparse(self, text: str) -> SparseVector | None:
         """Learned sparse vector (bge-m3), or None for dense-only models."""
@@ -242,6 +252,16 @@ class HashingEmbedder:
 
     def fingerprint(self) -> str:
         return f"hashing:{self.dim}"
+
+
+def _compact(values: list[float]) -> array:
+    """Hold a vector in 4 bytes per value when that changes no value, else in 8.
+
+    Models return float32, which round-trips exactly, so a cached vector reads
+    back as the same floats the model produced.
+    """
+    compact = array("f", values)
+    return compact if compact.tolist() == values else array("d", values)
 
 
 def _tokens(text: str) -> list[str]:

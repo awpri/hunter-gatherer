@@ -7,6 +7,10 @@ one trusted user's local clients. They are **not tenant authorization or proven
 identities**. Stored prose and addressed messages never execute, wake another
 product, fetch paths/URLs, or grant user permission.
 
+Saving, correcting and forgetting memories needs none of this. Those writes are
+atomic on their own and report a conflict when two clients collide (see
+`docs/concurrency.md`). Claims and leases are for work that spans many steps.
+
 Create a workspace with `action=create`, `actor`, `idempotency_key`, and `name`.
 Create a task with `workspace_id`, objective, constraints (strings),
 `acceptance_criteria` (`[{"id":"test","description":"Check behavior"}]`),

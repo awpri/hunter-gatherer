@@ -119,7 +119,7 @@ def _ready(db):
             and db.execute("SELECT (SELECT count(*) FROM archive_catalog_state)=(SELECT count(*) FROM archive_documents)").fetchone()[0])
 
 
-def indexed_discovery(store, token_queries, limit, include_sensitive, *, offset=None):
+def indexed_discovery(store, token_queries, limit, include_sensitive, *, offset=None, ranked_limit=0):
     """Return the same catalog result fields as scanning, or None to scan."""
     from hunter_gatherer.memory.document_discovery import _candidate, _catalog_rows, _match
 
@@ -141,24 +141,34 @@ def indexed_discovery(store, token_queries, limit, include_sensitive, *, offset=
                 "totals AS (SELECT rid,id,count(DISTINCT token) AS combined FROM matches GROUP BY rid,id) "
                 "SELECT r.rid,t.id,r.best,t.combined,count(*) OVER () AS total FROM ranks r JOIN totals t ON t.rid=r.rid "
                 "ORDER BY r.best DESC,t.combined DESC,t.id LIMIT ? OFFSET ?")
-            ranked = db.execute(ranking_sql, (terms, limit, offset or 0)).fetchall()
+            if ranked_limit:
+                # One ranking serves the page and the admitted list of leads.
+                listed = db.execute(ranking_sql, (terms, max((offset or 0) + limit, ranked_limit), 0)).fetchall()
+                ranked = listed[offset or 0:(offset or 0) + limit]
+            else:
+                listed = ranked = db.execute(ranking_sql, (terms, limit, offset or 0)).fetchall()
             rows = {row["catalog_rowid"]: row for row in _catalog_rows(
-                store, include_sensitive=include_sensitive, row_ids=[row["rid"] for row in ranked])} if ranked else {}
-            candidates = []
-            for rank in ranked:
+                store, include_sensitive=include_sensitive, row_ids=[row["rid"] for row in listed])} if listed else {}
+            page = {rank["rid"] for rank in ranked}
+            candidates, citations = [], []
+            for rank in listed:
                 row = rows.get(rank["rid"])
                 candidate = _candidate(row, include_sensitive=include_sensitive) if row is not None else None
                 if candidate is None or _match(candidate, token_queries) != (rank["best"], rank["combined"]):
                     return None
-                candidates.append(candidate)
-            matching = ranked[0]["total"] if ranked else 0
-            if not ranked and offset:
+                citations.append(candidate["original_citation"])
+                if rank["rid"] in page:
+                    candidates.append(candidate)
+            matching = listed[0]["total"] if listed else 0
+            if not listed and offset:
                 first = db.execute(ranking_sql, (terms, 1, 0)).fetchone()
                 matching = first["total"] if first else 0
             paging = {}
             if offset is not None:
                 from hunter_gatherer.memory.document_discovery import _discovery_paging
                 paging = _discovery_paging(offset, limit, matching, len(candidates))
+            if ranked_limit:
+                paging.update(ranked_citations=citations[:ranked_limit], ranked_complete=matching <= ranked_limit)
             return {**paging, "candidates": candidates, "scanned_documents": counts[0],
                     "invalid_identity_documents": counts[1], "documents_with_omitted_metadata": counts[2],
                     "matching_documents": matching, "omitted_documents": matching - len(candidates)}

@@ -779,7 +779,12 @@ def cmd_demo(args, _settings=None):
 
 # ── arg parsing ───────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
-    from hunter_gatherer.library import cmd_library_import, cmd_library_init, cmd_library_serve
+    from hunter_gatherer.library import (
+        cmd_library_import,
+        cmd_library_init,
+        cmd_library_serve,
+        cmd_library_storage,
+    )
     from hunter_gatherer.terminal import cmd_evidence
 
     def bounded_integer(lower, upper):
@@ -825,6 +830,11 @@ def build_parser() -> argparse.ArgumentParser:
     imports.add_argument("--max-bytes", type=bounded_integer(1, 10 * 1024**3), default=1024**3)
     imports.add_argument("--json", action="store_true")
     imports.set_defaults(func=cmd_library_import)
+
+    storage = sub.add_parser("storage", help="show how a library's file is shared between processes, and why")
+    storage.add_argument("directory", help="library directory created by hunt init")
+    storage.add_argument("--json", action="store_true")
+    storage.set_defaults(func=cmd_library_storage)
 
     for name, help_text in (("ask", "find source quotes for a question (no generated answer)"),
                             ("open", "read exact cited sources or their surrounding context")):
@@ -1005,7 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
     # Apply workdir from top-level flag if the subcommand supports it.
     try:
         # Demo startup bypasses both cached settings and user environment/.env.
-        isolated = (args.cmd in {"demo", "setup", "init", "serve", "import"}
+        isolated = (args.cmd in {"demo", "setup", "init", "serve", "import", "storage"}
                     or getattr(args, "library", None) is not None or bool(getattr(args, "demo_library", None))
                     or (args.cmd == "backup" and args.backup_action in {"verify", "restore"})
                     or getattr(args, "server", None) is not None)

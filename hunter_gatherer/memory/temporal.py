@@ -85,7 +85,7 @@ class TemporalMemory:
                 visible = False
             if not visible:
                 return None
-            result.append({"memory_id": mem.id, "citation": f"[mem:{mem.id[:6]}]"})
+            result.append({"memory_id": mem.id, "citation": f"[mem:{mem.id}]"})
         return result
 
     def _public(self, row, include_sensitive=False):

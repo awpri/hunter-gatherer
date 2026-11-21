@@ -69,6 +69,23 @@ def discover_regions(store, queries, include_sensitive=False, limit=8):
                     break
         return results
 
+def admitted_regions(store, citations, include_sensitive=False):
+    """Resolve regions an earlier search admitted, in that order, as they are now.
+
+    A region whose batch was revoked, or whose source was forgotten, replaced
+    or made sensitive, is withdrawn. Returns the items and withdrawn citations.
+    """
+    items, withdrawn = [], []
+    for citation in citations:
+        record_id = parse_region_citation(citation)
+        item = resolve_region(store, record_id, include_sensitive) if record_id else None
+        if item is None:
+            withdrawn.append(citation)
+            continue
+        item['followup']['arguments']['include_sensitive'] = include_sensitive
+        items.append(item)
+    return items, withdrawn
+
 def region_image(store, record_id, *, include_sensitive=False, view='region'):
     if view not in {'region', 'page'}:
         return error('invalid_input', 'view must be region or page', 422)

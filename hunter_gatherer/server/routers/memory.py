@@ -118,7 +118,7 @@ def add_memory(request: Request, body: MemoryIn):
                  tags=body.tags, source="ui")
     cons = Consolidator(store=store, settings=_settings(request))
     decision = cons.decide(mem)
-    stored = cons.apply(mem, decision)
+    stored, decision = cons.resolve(mem, decision)
     if stored is None:
         raise HTTPException(200, detail=f"redundant — {decision.reason}")
     return _to_out(stored)
@@ -136,6 +136,8 @@ def get_memory(request: Request, memory_id: str):
 
 @router.patch("/{memory_id}", response_model=MemoryOut)
 def patch_memory(request: Request, memory_id: str, body: MemoryPatch):
+    from hunter_gatherer.memory.schemas import MemoryConflictError
+
     store = _store(request)
     m = store.get(memory_id)
     if m is None or m.deleted_at is not None:
@@ -146,7 +148,14 @@ def patch_memory(request: Request, memory_id: str, body: MemoryPatch):
         m.importance = body.importance
     if body.tags is not None:
         m.tags = body.tags
-    store.update(m)
+    try:
+        store.update(m)
+    except MemoryConflictError as exc:
+        # Another client forgot, corrected or edited it since it was read.
+        if exc.reason in {"missing", "deleted"}:
+            raise HTTPException(404, "memory not found") from exc
+        raise HTTPException(409, {"error_code": "memory_conflict", "reason": exc.reason,
+                                  "current_id": exc.current_id}) from exc
     return _to_out(m)
 
 

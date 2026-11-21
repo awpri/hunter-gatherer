@@ -7,7 +7,6 @@ they are not a promise about a particular model's tokenizer.
 """
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from hunter_gatherer.context import estimate_tokens
@@ -27,24 +26,22 @@ def set_core_memory(store: MemoryStore, memory_id: str, pinned: bool = True) -> 
     """
     if not isinstance(pinned, bool):
         raise ValueError("pinned must be a boolean")
-    with store._lock:
-        memory = store.get(memory_id)
-        if memory is None or not memory.is_retrievable():
-            raise ValueError("Active memory not found")
+
+    def pin(memory: Memory) -> Memory | None:
         metadata = dict(memory.metadata)
         if pinned:
             metadata.update(core=True, retention="permanent")
         else:
             metadata.pop("core", None)
-        if metadata != memory.metadata:
-            store._sqlite.execute(
-                "UPDATE memories SET metadata = ? WHERE id = ?",
-                (json.dumps(metadata), memory.id),
-            )
-            store._invalidate_cached_memory(memory.id)
-            store._sqlite.commit()
-            memory.metadata = metadata
+        if metadata == memory.metadata:
+            return None
+        memory.metadata = metadata
         return memory
+
+    # Read and write in one store transaction: a pin can neither be lost to,
+    # nor undo, a correction or privacy change made by another agent.
+    changed = store.mutate(memory_id, pin)
+    return changed if changed is not None else store.get(memory_id)
 
 
 def core_memory_block(

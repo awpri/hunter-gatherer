@@ -131,6 +131,10 @@ class Settings(BaseSettings):
 
     # ── Memory: SQLite source-of-truth ──────────────────────────────────────
     sqlite_path: str = "library.db"
+    # How SQLite saves changes. "auto" chooses by where the file lives (see
+    # hunter_gatherer.storage) and is the only value meant for normal use;
+    # "wal" and "delete" pin a mode for tests and measurements.
+    sqlite_journal: str = "auto"
 
     # ── Embeddings ──────────────────────────────────────────────────────────
     embed_model: str = "hashing"

@@ -184,6 +184,18 @@ describe('Bounded Find continuation',()=>{
   expect(vi.mocked(libraryApi.request).mock.calls.at(-1)![2]).toEqual({cursor:'a'.repeat(32),include_sensitive:false,max_tokens:4096,contextual_requirements:true});
   nodes=render();expect(nodes.some(node=>node.props.className==='result-count'&&text(node)==='2 results')).toBe(true);expect(nodes.some(node=>node.type==='p'&&text(node).includes('2 pages loaded · Latest page: Weak matches · review required'))).toBe(true);expect(nodes.some(node=>node.type==='p'&&text(node).includes('Page 2 candidate matching · terms not matched on this page: first'))).toBe(true);expect(nodes.some(node=>node.type==='p'&&text(node).includes('Page 2 candidate matching · terms not matched on this page: outcome'))).toBe(true);expect(nodes.some(node=>node.type==='p'&&text(node).includes('Page 2: Inspect detail This note does not assess all loaded sources.'))).toBe(true);expect(nodes.filter(node=>node.type==='blockquote')).toHaveLength(2);expect(nodes.some(node=>node.type==='button'&&text(node)==='Load more results')).toBe(false);expect(nodes.some(node=>node.type==='h3'&&text(node)==='More sources to inspect')).toBe(false);
  });
+ it('says when later pages left out unavailable matches or newer records exist',async()=>{
+  const notes=(nodes:ReactElement<any>[])=>nodes.filter(node=>node.type==='p'&&node.props.className==='field-note').map(text);
+  let nodes=await search();expect(notes(nodes).filter(note=>/no longer available|added after|More matches may/.test(note))).toEqual([]);
+  vi.mocked(libraryApi.request).mockResolvedValueOnce({...first,omitted_references:[],continuation:{next_cursor:'b'.repeat(32),scope:'Admitted matches only',withdrawn:1,added_since_first_page:'Not included; search again to include them.'}});
+  await nodes.find(node=>node.type==='button'&&text(node)==='Load more results')!.props.onClick();nodes=render();
+  expect(notes(nodes)).toContain('1 match from this search is no longer available and was left out.');
+  expect(notes(nodes)).toContain('New records were added after this search began. Search again to include them.');
+  vi.mocked(libraryApi.request).mockResolvedValueOnce({...first,omitted_references:[],continuation:{next_cursor:null,scope:'Admitted matches only',withdrawn:2,admitted_limit_reached:true}});
+  await nodes.find(node=>node.type==='button'&&text(node)==='Load more results')!.props.onClick();nodes=render();
+  expect(notes(nodes)).toEqual(expect.arrayContaining(['3 matches from this search are no longer available and were left out.','New records were added after this search began. Search again to include them.','More matches may be available. Narrow your question to see them.']));
+  expect(nodes.some(node=>node.type==='button'&&text(node)==='Load more results')).toBe(false);
+ });
  it('keeps the first page and cursor when a continuation fails and allows retry',async()=>{
   let nodes=await search();vi.mocked(libraryApi.request).mockRejectedValueOnce(new Error('Find cursor is stale; restart Find.'));
   await nodes.find(node=>node.type==='button'&&text(node)==='Load more results')!.props.onClick();nodes=render();

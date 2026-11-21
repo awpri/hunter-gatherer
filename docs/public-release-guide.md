@@ -4,7 +4,7 @@ This guide describes the reproducible source and package boundary for the
 hunter/gatherer public alpha. For installation and normal use, start with
 [Get started](getting-started.md).
 
-The release is `0.1.0a2`, tagged `v0.1.0a2`. It includes the local library, bundled
+The release is `0.1.0a3`, tagged `v0.1.0a3`. It includes the local library, bundled
 interface, terminal and MCP workflow. The inherited agent/audio runtime remains
 available for advanced use but is not the default alpha experience.
 
@@ -60,7 +60,7 @@ checkout. Example, continuing from the previous commands:
 
 ```bash
 python3 -m venv ../hg-check-env
-../hg-check-env/bin/python -m pip install '../hg-release-dist/hunter_gatherer-0.1.0a2-py3-none-any.whl[dev,document-view]'
+../hg-check-env/bin/python -m pip install '../hg-release-dist/hunter_gatherer-0.1.0a3-py3-none-any.whl[dev,document-view]'
 cd ..
 hg-check-env/bin/python -m pytest -q public-candidate/tests
 hg-check-env/bin/python -I -B public-candidate/scripts/smoke_packaged_demo.py --require-lean --output packaged-demo.json

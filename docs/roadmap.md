@@ -1,6 +1,6 @@
 # Direction and release scope
 
-**0.1.0a2 is a public alpha.** The library, terminal and MCP workflows are the
+**0.1.0a3 is a public alpha.** The library, terminal and MCP workflows are the
 supported focus. Proposals below are not release commitments.
 
 h/g centers on a question, its sources and a useful handoff to an AI assistant.

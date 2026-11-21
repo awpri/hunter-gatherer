@@ -27,8 +27,13 @@ class ResultSidecar:
         self.max_rows = max_rows
         with contextlib.suppress(Exception):
             conn = store._sqlite  # noqa: SLF001 — same-file sidecar by design
-            conn.execute("CREATE TABLE IF NOT EXISTS tool_results (call_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at REAL NOT NULL)")
-            conn.commit()
+            # Shared connection: commit only under the store lock, and never
+            # someone else's open transaction.
+            with store._lock:  # noqa: SLF001
+                owns = not conn.in_transaction
+                conn.execute("CREATE TABLE IF NOT EXISTS tool_results (call_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at REAL NOT NULL)")
+                if owns:
+                    conn.commit()
 
     def park(self, call_id: str, payload: str) -> bool:
         """Store a raw payload; prune old rows beyond max_rows. Returns False

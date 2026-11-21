@@ -9,13 +9,19 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
 
 from hunter_gatherer.memory import find_cursor
+from hunter_gatherer.memory.embeddings import HashingEmbedder
 from hunter_gatherer.memory.evidence import _evidence_requirements, build_evidence_packet
 from hunter_gatherer.memory.evidence_bounded import bounded_evidence_packet
 from hunter_gatherer.memory.output_budget import budget_report, output_bytes, validate_budget
+
+# Result kinds a first page ranks and admits for its continuations.
+_RANKED = ("memories", "passages", "catalog")
+_PREFIX = {"memories": "[mem:", "passages": "[doc:", "catalog": "[file:"}
 
 
 def _subject_references(packet, queries):
@@ -276,11 +282,13 @@ def find(harness, query: str | None = None, requirements: list[str] | None = Non
          max_tokens: int = 2048, include_sensitive: bool = False,
          cursor: str | None = None, constraints: dict | None = None,
          contextual_requirements: bool | None = None) -> dict:
-    """One bounded search page, or revision-pinned continuation of that search.
+    """One bounded search page, or a continuation of that search.
 
-    Continuations retain only query/options and offsets, never evidence bodies.
-    The existing retrieval model and thresholds determine the candidate scope;
-    reaching its end does not establish that an answer is absent from the library.
+    The first page admits up to ``find_cursor.ADMITTED`` ranked matches of
+    each kind. Continuations deliver the rest of those, rechecked as they are
+    delivered, and retain only query/options and citations, never evidence
+    bodies. The existing retrieval model and thresholds determine the candidate
+    scope; reaching its end does not establish that an answer is absent.
     """
     validate_budget(max_tokens)
     if type(include_sensitive) is not bool:
@@ -292,59 +300,119 @@ def find(harness, query: str | None = None, requirements: list[str] | None = Non
         constraints = validate_constraints(constraints)
         if constraints and not getattr(harness.settings, "library_find_relationships", False):
             raise ValueError("Explicit graph constraints require library_find_relationships enabled; use ordinary Find without constraints otherwise.")
-    with harness.store._lock:
-        before = find_cursor.revision(harness.store)
-        if cursor is not None:
-            state = find_cursor.resume(harness.store, cursor, include_sensitive, query, requirements, constraints,
-                                       contextual_requirements)
-        else:
-            if type(query) is not str or not query.strip() or len(query) > 4000:
-                raise ValueError("query must contain 1 to 4000 characters (or supply a Find cursor)")
-            state = {"query": query.strip(), "requirements": _evidence_requirements(requirements),
-                     "include_sensitive": include_sensitive, "offsets": {}, "pending": {}}
-            if constraints:
-                state["constraints"] = constraints
-            if contextual_requirements:
-                state["contextual_requirements"] = True
-        from hunter_gatherer.memory.retrieval_context import retrieval_context
-        # Relationship navigation reuses the ordinary query vector. Enabling it
-        # must not also change the semantic input of the baseline search.
-        with retrieval_context(state['query']):
-            result, next_state = _find_page(harness, state, max_tokens, continuation=cursor is not None)
-        after = find_cursor.revision(harness.store)
-        # Own index preparation may write before the read snapshot. External
-        # commits during assembly cannot be attached to the newer revision.
-        if before[1] != after[1]:
-            raise ValueError("Library changed during Find; restart Find.")
-        if next_state is not None:
-            find_cursor.issue(harness.store, next_state, after,
-                              token=result["continuation"]["next_cursor"])
-        return result
+    from hunter_gatherer.memory.evidence import prepare_evidence_search
+    from hunter_gatherer.memory.library_health import _read_snapshot
+    from hunter_gatherer.memory.retrieval_context import retrieval_context
+
+    store = harness.store
+    if cursor is None:
+        if type(query) is not str or not query.strip() or len(query) > 4000:
+            raise ValueError("query must contain 1 to 4000 characters (or supply a Find cursor)")
+        _embed_before_locking(store, _search_texts(query, requirements, bool(contextual_requirements)))
+        # Other writers may queue deliveries, even when using a different backend.
+        # Complete due repairs before pinning the page snapshot.
+        store._retry_pending_index()
+        if not isinstance(store.embedder, HashingEmbedder):
+            # Catch up before taking the page lock. Semantic search rechecks
+            # the database version inside its snapshot and reports failures.
+            with suppress(Exception):
+                store._refresh_index_from_other_writers()
+    with store._lock:
+        if store._sqlite.in_transaction:
+            raise ValueError("Find continuation requires no active transaction; restart Find.")
+        # Index upkeep may write, so it happens first. Everything after it reads
+        # one snapshot: the whole page, and on a continuation the check of every
+        # admitted record it delivers. A commit by another process during the
+        # search therefore cannot disturb this page.
+        archive = prepare_evidence_search(store, source_discovery=True)
+        with _read_snapshot(store):
+            if cursor is not None:
+                state = find_cursor.resume(store, cursor, include_sensitive, query, requirements, constraints,
+                                           contextual_requirements)
+            else:
+                state = {"query": query.strip(), "requirements": _evidence_requirements(requirements),
+                         "include_sensitive": include_sensitive, "offsets": {}, "pending": {}}
+                if constraints:
+                    state["constraints"] = constraints
+                if contextual_requirements:
+                    state["contextual_requirements"] = True
+            # Relationship navigation reuses the ordinary query vector. Enabling it
+            # must not also change the semantic input of the baseline search.
+            with retrieval_context(state['query']):
+                result, next_state = _find_page(harness, state, max_tokens, continuation=cursor is not None,
+                                                archive=archive)
+            if next_state is not None:
+                find_cursor.issue(store, next_state, token=result["continuation"]["next_cursor"])
+            return result
 
 
-def _find_page(harness, state, max_tokens, *, continuation):
+def _search_texts(query, requirements, contextual: bool) -> list[str]:
+    """The question and detail texts the search will embed, worded as it words them.
+
+    A detail searched with the question as context is embedded as
+    "question\\ndetail", a different text from the detail alone. Invalid input
+    yields only what is valid; the search itself reports the rest.
+    """
+    if not isinstance(query, str):
+        return []
+    question = query.strip()
+    try:
+        details = _evidence_requirements(requirements)
+    except ValueError:
+        details = []
+    return [question, *(f"{question}\n{detail}" if contextual else detail for detail in details)]
+
+
+def _embed_before_locking(store, texts) -> None:
+    """Run the embedding model for the question and its details before the store lock is held.
+
+    A search holds the store lock from start to finish, so every other client
+    waits for whatever it does, including a model call. An embedder that caches
+    by text lets that call happen here instead; the search then finds the
+    vector already computed. Purely an optimization: any failure is left for
+    the search itself to report.
+    """
+    embedder = getattr(store, "embedder", None)
+    if not getattr(embedder, "caches_by_text", False):
+        return
+    wanted = [text.strip() for text in texts if isinstance(text, str) and 0 < len(text.strip()) <= 4000]
+    if wanted:
+        try:
+            embedder.embed_batch(wanted[:5])
+        except Exception:  # noqa: BLE001 — reported by the search, with its own handling
+            return
+
+
+def _find_page(harness, state, max_tokens, *, continuation, archive=None):
     query, questions = state["query"], state["requirements"]
     include_sensitive = state["include_sensitive"]
     policy = harness.settings.library_find_delivery_policy
     relevance = harness.settings.library_find_relevance_policy
     focused = relevance == "coverage"
+    graph_items, graph_metadata = [], None
+    graph_seen = set(state["pending"].get("relationship_seen", []))
+    graph_bodies = set(state["pending"].get("relationship_bodies", []))
+    graph_seeds = list(state["pending"].get("relationship_seeds", []))
+    admitted = None
+    if continuation:
+        # Never repeat a quote: a passage already delivered whole as a
+        # connected-source lead leaves the ordinary list.
+        admitted = {name: [citation for citation in state["admitted"][name] if citation not in graph_bodies]
+                    for name in _RANKED}
     packet = build_evidence_packet(
         harness.store, query.strip(), top_k=5, include_sensitive=include_sensitive,
         evidence_requirements=questions,
         **({"contextual_requirements": True} if state.get("contextual_requirements") else {}),
         selection_strategy="requirements" if questions else "relevance",
         source_discovery=True, memory_discovery=True, include_context=False,
-        retrieval_offsets={key: value for key, value in state["offsets"].items()
-                           if key in {"memories", "passages", "catalog"}}, retrieval_continuation=continuation,
+        prepared_archive=archive, retrieval_continuation=continuation,
+        **({"admitted": admitted} if continuation
+           else {"retrieval_offsets": {}, "admitted_limit": find_cursor.ADMITTED}),
         **({"explain_document_matches": True} if policy in {"body_first", "focused"} or focused else {}),
         **({"document_query_strategy": "original"} if relevance != "legacy" else {}),
         **({"document_relevance_policy": "coverage"} if focused else {}),
     )
     paging = packet.pop("retrieval_page")
-    graph_items, graph_metadata = [], None
-    graph_seen = set(state["pending"].get("relationship_seen", []))
-    graph_bodies = set(state["pending"].get("relationship_bodies", []))
-    graph_seeds = list(state["pending"].get("relationship_seeds", []))
     if getattr(harness.settings, "library_find_relationships", False):
         from hunter_gatherer.memory.relationship_retrieval import relationship_candidates
         if not continuation:
@@ -357,8 +425,10 @@ def _find_page(harness, state, max_tokens, *, continuation):
         validated = {hit['citation']: (hit, path) for hit, path in graph_items}
         if set(validated) != set(graph_order):
             raise ValueError('Relationship candidates changed during Find; restart Find.')
-        # The source revision is pinned, but embedding availability may change.
-        # Retain IDs/order only; every resumed path and source is revalidated.
+        # Connected leads are navigated again on every page. While their set is
+        # unchanged its first order keeps the offset exact; a changed set means
+        # the leads themselves changed. Retain IDs/order only; every resumed
+        # path and source is revalidated.
         graph_items = [validated[citation] for citation in graph_order]
     else:
         graph_order = [hit['citation'] for hit, _ in graph_items]
@@ -369,21 +439,14 @@ def _find_page(harness, state, max_tokens, *, continuation):
     # a five-item slice. The output budget, not a source-count cap, controls bodies.
     graph_page = graph_items[graph_offset:]
     graph_base = [hit["citation"] for hit, _ in graph_page]
-    # Never repeat a quote. An earlier graph lead may be promoted to a body if
-    # ordinary retrieval independently reaches it on a later page.
-    for hit in packet["supporting_passages"]:
-        if hit["citation"] in graph_bodies:
-            state = deepcopy(state)
-            state["pending"]["passages"] = sorted(
-                set(state["pending"].get("passages", [])) | {hit["citation"]})
-    requirement_refs = {citation for check in packet["requirement_checks"]
-                        for citation in check["retrieval_assessment"].get("candidate_citations", [])}
-    required_seen = set(state["pending"].get("requirements", []))
+    # An earlier graph reference may still be promoted to a body if ordinary
+    # retrieval independently reaches it on a later page.
     streams = {"memories": packet["relevant_memories"], "passages": packet["supporting_passages"],
                "catalog": packet["source_discovery"]["candidates"]}
-    for name, values in streams.items():
-        seen = set(state["pending"].get(name, [])) | required_seen
-        values[:] = [item for item in values if item.get("citation", item.get("original_citation")) not in seen]
+    # What this page offers, in retrieval order. A first page admits these,
+    # then its requirement leads, then the rest of each ranking.
+    offered = {name: [item.get("citation", item.get("original_citation")) for item in values]
+               for name, values in streams.items()}
     baseline_passages = list(streams["passages"])
     baseline_citations = {hit["citation"] for hit in baseline_passages}
     ordinary_statistics = [*baseline_passages, *streams["memories"]]
@@ -496,18 +559,38 @@ def _find_page(harness, state, max_tokens, *, continuation):
         trace["graph_pass"] = "typed links then scoped lexical passages; no extra model"
     if relevance != "legacy":
         trace["relevance_policy"] = relevance
+    from hunter_gatherer.memory.visual_regions import admitted_regions, discover_regions
+    if continuation:
+        regions_admitted = "visual_regions" in state["admitted"]
+        region_page, region_withdrawn = admitted_regions(
+            harness.store, state["admitted"].get("visual_regions", []), include_sensitive)
+        limit_reached = list(state["limit_reached"])
+    else:
+        region_page, region_withdrawn = discover_regions(
+            harness.store, [query, *questions], include_sensitive, limit=find_cursor.REGIONS), []
+        regions_admitted = bool(region_page)
+        limit_reached = [name for name in _RANKED if not paging[name]["ranked_complete"]]
+        if len(region_page) == find_cursor.REGIONS:
+            limit_reached.append("visual_regions")
     token = find_cursor.new_token()
     navigation = {"next_cursor": token,
                   "scope": "Admitted memory/passage/catalog matches; not exhaustive library answerability."}
+    if limit_reached:
+        # Each kind admits its first ADMITTED ranked matches; a narrower
+        # question reaches the rest.
+        navigation["admitted_limit_reached"] = True
+    if continuation:
+        withdrawn = sum(len(paging[name]["withdrawn"]) for name in _RANKED) + len(region_withdrawn)
+        if withdrawn:
+            # Admitted records that are no longer available are never delivered.
+            navigation["withdrawn"] = withdrawn
+        if find_cursor.added_since(harness.store, state):
+            navigation["added_since_first_page"] = "Not included; search again to include them."
     envelope = {"work_trace": trace, "continuation": navigation}
-    from hunter_gatherer.memory.visual_regions import discover_regions
-    region_pool = discover_regions(harness.store, [query, *questions], include_sensitive, limit=256)
-    region_offset = state["offsets"].get("visual_regions", 0)
-    region_page = region_pool[region_offset:]
-    if region_pool:
+    if regions_admitted:
         envelope["visual_region_discovery"] = {
             "scope": "At most 256 FTS description matches, ranked lexically; not exhaustive image understanding.",
-            "candidate_limit_reached": len(region_pool) == 256,
+            "candidate_limit_reached": "visual_regions" in limit_reached,
             "remaining": len(region_page), "description_policy": "Agent-authored, unverified discovery aids; not source quotations."}
     if region_page:
         # Reserve an inspectable exact reference before ordinary output allocation.
@@ -574,9 +657,10 @@ def _find_page(harness, state, max_tokens, *, continuation):
                 detail["omitted_paths"] += 1
         # Recompute after rejected additions; text/refs were never truncated.
         budget_report(projected, max_tokens)
-    # Keep graph IDs out of the ordinary cursor's bounded pending set.
+    # Graph-only leads are tracked by the relationship bookkeeping below.
     returned["passages"] -= graph_returned - baseline_citations
-    next_state = deepcopy(state)
+    next_state = {key: deepcopy(value) for key, value in state.items() if key not in {"offsets", "pending"}}
+    next_state.update(offsets={}, pending={}, limit_reached=limit_reached)
     if graph_metadata is not None:
         next_state["pending"]["relationship_seeds"] = graph_seeds
         next_state["pending"]["relationship_seen"] = sorted(graph_seen | graph_returned)
@@ -584,24 +668,27 @@ def _find_page(harness, state, max_tokens, *, continuation):
             item['citation'] for item in projected['supporting_passages']
             if item['citation'] in graph_all})
         next_state['pending']['relationship_order'] = graph_order
-    next_state["pending"]["requirements"] = sorted(
-        required_seen | (set().union(*returned.values()) & requirement_refs))
-    next_state["offsets"]["visual_regions"] = region_offset + region_consumed
-    more = region_offset + region_consumed < len(region_pool)
-    for name, page in paging.items():
-        seen = set(state["pending"].get(name, [])) | returned[name] | (required_seen & set(page["base_citations"]))
-        base = page["base_citations"]
-        consumed = 0
-        for citation in base:
-            if citation not in seen:
-                break
-            seen.remove(citation)
-            consumed += 1
-        next_state["offsets"][name] = page["offset"] + consumed
-        next_state["pending"][name] = sorted(seen)
-        more |= page["has_more"] or consumed < len(base)
-        more |= any(item.get("citation", item.get("original_citation")) not in returned[name]
-                    for item in streams[name])
+    # Admitted citations leave their list once represented on a page (as a body
+    # or an exact reference, in any order) or withdrawn as no longer available.
+    if continuation:
+        remaining = {name: [citation for citation in admitted[name]
+                            if citation not in returned[name] and citation not in paging[name]["withdrawn"]]
+                     for name in _RANKED}
+    else:
+        leads = [citation for check in packet["requirement_checks"]
+                 for citation in check["retrieval_assessment"].get("candidate_citations", [])]
+        remaining = {}
+        for name in _RANKED:
+            ordered = [*offered[name], *(citation for citation in leads if citation.startswith(_PREFIX[name])),
+                       *paging[name]["ranked"]]
+            remaining[name] = [citation for citation in dict.fromkeys(ordered) if citation not in returned[name]]
+        next_state["watermark"] = find_cursor.watermark(harness.store)
+    if regions_admitted:
+        remaining["visual_regions"] = [item["citation"] for item in region_page[region_consumed:]]
+    next_state["admitted"] = remaining
+    more = any(remaining.values())
+    progressed = continuation and (sum(map(len, remaining.values()))
+                                   < sum(map(len, state["admitted"].values())))
     if graph_metadata is not None:
         graph_consumed = 0
         for citation in graph_base:
@@ -610,13 +697,11 @@ def _find_page(harness, state, max_tokens, *, continuation):
             graph_consumed += 1
         next_state["offsets"]["relationships"] = graph_offset + graph_consumed
         more |= graph_offset + graph_consumed < len(graph_items)
-    skipped_known_graph_matches = bool(graph_seen) and any(
-        offset > state["offsets"].get(name, 0)
-        for name, offset in next_state["offsets"].items())
-    if more and not any(returned.values()) and not graph_returned and not region_consumed and not skipped_known_graph_matches:
+        progressed |= graph_consumed > 0
+    if more and not any(returned.values()) and not graph_returned and not region_consumed and not progressed:
         raise ValueError("Find budget cannot represent the next match; increase max_tokens or use a narrower query.")
     if not more:
-        projected["continuation"] = {"next_cursor": None, "scope": navigation["scope"]}
+        projected["continuation"]["next_cursor"] = None
         next_state = None
     budget_report(projected, max_tokens)
     assert output_bytes(projected) <= max_tokens * 4

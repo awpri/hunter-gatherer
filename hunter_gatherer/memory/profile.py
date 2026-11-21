@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 
 from hunter_gatherer.memory.output_budget import budget_report, fits, output_bytes, validate_budget
 from hunter_gatherer.memory.retrieval_feedback import current_memory
@@ -12,8 +13,6 @@ def _candidate_lower_bound(entry):
 
 
 def build_profile(harness, query="", top_k=8, include_sensitive=False, max_tokens=4096):
-    from hunter_gatherer.mcp.tools import _public_metadata, _recall_visible, _store_identity
-
     validate_budget(max_tokens)
     if type(top_k) is not int or not 1 <= top_k <= 100:
         raise ValueError("top_k must be 1–100")
@@ -22,6 +21,22 @@ def build_profile(harness, query="", top_k=8, include_sensitive=False, max_token
     query = "" if query is None else query
     if not isinstance(query, str) or len(query) > 2000:
         raise ValueError("query must be at most 2000 characters")
+    store = harness.store
+    if query.strip():
+        from hunter_gatherer.memory.simple_search import _embed_before_locking
+
+        _embed_before_locking(store, [query])  # the model runs before the lock is held, as in Find
+    # A profile is some eighty small reads. Taking the store lock for each one
+    # lets another client's whole operation cut in before every read: with
+    # three busy clients in one server a 26 ms profile took about a second. One
+    # hold makes it wait once, and gives it a single consistent view.
+    with getattr(store, "_lock", None) or nullcontext():
+        return _build_profile(harness, query, top_k, include_sensitive, max_tokens)
+
+
+def _build_profile(harness, query, top_k, include_sensitive, max_tokens):
+    from hunter_gatherer.mcp.tools import _public_metadata, _recall_visible, _store_identity
+
     visible = [m for m in harness.store.iter_all() if current_memory(harness.store, m.id, include_sensitive, memory=m)]
     anchors = sorted(visible, key=lambda m: (-m.importance, m.id))
     pins = [m for m in anchors if m.metadata.get("core") is True]

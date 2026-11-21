@@ -45,9 +45,14 @@ def _read_snapshot(store):
         owns_transaction = not db.in_transaction
         if owns_transaction:
             db.execute("BEGIN")
+        counted = owns_transaction and hasattr(store, "_snapshot_depth")
+        if counted:
+            store._snapshot_depth += 1  # lets a write tell this from a write transaction
         try:
             yield db
         finally:
+            if counted:
+                store._snapshot_depth -= 1
             # Only our read transaction is ended. Never commit or roll back a
             # transaction that predates this diagnostic call, even on failure.
             if owns_transaction:

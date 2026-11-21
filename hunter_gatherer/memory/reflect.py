@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 from hunter_gatherer.config import Settings
 from hunter_gatherer.memory.consolidate import Consolidator
-from hunter_gatherer.memory.schemas import Memory
+from hunter_gatherer.memory.schemas import Memory, MemoryConflictError
 from hunter_gatherer.memory.store import MemoryStore
 
 log = logging.getLogger(__name__)
@@ -52,6 +52,11 @@ DEFAULT_CONSOLIDATED_MIN_IMPORTANCE = 0.5  # lower deletion floor for them
 DEFAULT_CONSOLIDATION_IMPORTANCE_BOOST = 0.5  # per source, capped at 10
 DEFAULT_CLUSTER_COSINE = 0.78         # group similar memories for summarization
 DEFAULT_SUMMARIZE_MAX_IMPORTANCE = 7.0  # only summarize lower-importance episodic
+
+
+def _not_permanent(memory: Memory) -> bool:
+    """Automatic passes never forget a record approved for permanent retention."""
+    return not memory.is_permanent
 
 
 @dataclass
@@ -147,7 +152,6 @@ class Reflector:
         audit trail a hard delete destroys."""
         if self.judge is None:
             return 0
-        now = time.time()
         floor = float(getattr(self.settings, "contradiction_cosine", 0.72))
         max_pairs = int(getattr(self.settings, "contradiction_max_pairs", 20))
         pairs = self.store.contradiction_candidates(
@@ -161,11 +165,11 @@ class Reflector:
                 verdict = (self.judge(older.text, newer.text) or "").strip().upper()
                 if not verdict.startswith("SUPERSEDE"):
                     continue
-                older.metadata = {**older.metadata, "superseded_by": newer.id, "valid_to": now}
-                self.store.update(older)
-                newer.metadata = {**newer.metadata,
-                                  "valid_from": max(float(newer.metadata.get("valid_from", 0.0)), now)}
-                self.store.update(newer)
+                # The verdict is about these two texts as they were read. If
+                # either was forgotten, corrected, pinned or edited since, the
+                # store changes nothing and the pair is judged again next pass.
+                if not self.store.mark_superseded(older, newer):
+                    continue
                 self._invalidate_cache(older.id)  # 2026-09-01 #1: coherence
                 marked += 1
         if marked:
@@ -288,7 +292,10 @@ class Reflector:
                     links = sorted(inherited.items(), key=lambda kv: -kv[1])[: top_m + len(cluster)]
                     self.store.set_links(new.id, links)
             for m in cluster:
-                self.store.delete(m.id)
+                # Only forget a source that is still what was summarized; one
+                # pinned or corrected in the meantime stays.
+                with contextlib.suppress(MemoryConflictError):
+                    self.store.delete(m.id, expected=m, guard=_not_permanent)
             summarized += len(cluster)
         self._rejected_summaries = rejected  # surfaced into ReflectionReport by run()
         return summarized, created
@@ -304,10 +311,14 @@ class Reflector:
             for s in seen:
                 hits = self.store.vector_search(m.text, top_k=1)
                 if hits and hits[0].score >= self.settings.dedup_cosine and hits[0].id == s.id:
-                    # Merge m into s, then delete m.
-                    self.consolidator._merge(s, m)  # noqa: SLF001
-                    self.store.update(s)
-                    self.store.delete(m.id)
+                    # Merge m into s, then delete m — unless either changed
+                    # since this pass read them; then leave both for next time.
+                    try:
+                        self.consolidator._merge(s, m)  # noqa: SLF001
+                        self.store.update(s)
+                        self.store.delete(m.id, expected=m, guard=_not_permanent)
+                    except MemoryConflictError:
+                        break
                     removed += 1
                     dup = True
                     break
@@ -340,14 +351,29 @@ class Reflector:
                 factor = self.decay_factor
                 floor = self.min_importance
             new_imp = m.importance * factor
-            if new_imp < floor:
-                self.store.delete(m.id)
-                self._invalidate_cache(m.id)  # 2026-09-01 #1: coherence
-                deleted += 1
-            else:
-                m.importance = new_imp
-                self.store.update(m)
-                decayed += 1
+            # Decide again on the record as it is now: one that was used,
+            # pinned, corrected or forgotten since the listing is left alone.
+            def unused(current, seen=m):
+                return (current.access_count == seen.access_count
+                        and current.last_accessed <= cutoff and not current.is_permanent)
+
+            try:
+                if new_imp < floor:
+                    if not self.store.delete(m.id, expected=m, guard=unused):
+                        continue
+                    self._invalidate_cache(m.id)  # 2026-09-01 #1: coherence
+                    deleted += 1
+                else:
+                    def decay(current, new_imp=new_imp, unused=unused, seen=m):
+                        if not unused(current) or current.importance != seen.importance:
+                            return None
+                        current.importance = new_imp
+                        return current
+
+                    if self.store.mutate(m.id, decay) is not None:
+                        decayed += 1
+            except MemoryConflictError:
+                continue
         return decayed, deleted
 
     def _invalidate_cache(self, memory_id: str) -> None:

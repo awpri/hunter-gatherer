@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from hunter_gatherer.config import Settings
-from hunter_gatherer.memory.schemas import ConsolidationDecision, Memory
+from hunter_gatherer.memory.schemas import ConsolidationDecision, Memory, MemoryConflictError
 from hunter_gatherer.memory.store import MemoryStore
 
 log = logging.getLogger(__name__)
@@ -72,57 +72,173 @@ class Consolidator:
 
         op = self._judge(candidate.text, existing.text)
 
-        if op == "UPDATE":
-            return ConsolidationDecision(op="UPDATE", target_id=existing.id, reason="LLM: update existing")
-        if op == "DELETE":
-            return ConsolidationDecision(op="DELETE", target_id=existing.id, reason="LLM: contradiction")
-        if op == "NOOP":
-            return ConsolidationDecision(op="NOOP", target_id=existing.id, reason="LLM: redundant")
+        reasons = {"UPDATE": "LLM: update existing", "DELETE": "LLM: contradiction", "NOOP": "LLM: redundant"}
+        if op in reasons:
+            return ConsolidationDecision(op=op, target_id=existing.id, reason=reasons[op],
+                                         target_token=existing._stored_token)
         return ConsolidationDecision(op="ADD", reason="LLM: add despite similarity")
 
     def apply(self, candidate: Memory, decision: ConsolidationDecision) -> Memory | None:
         """Execute a decision; return None only when a NOOP changes nothing."""
+        return self.resolve(candidate, decision)[0]
+
+    def resolve(self, candidate: Memory,
+                decision: ConsolidationDecision) -> tuple[Memory | None, ConsolidationDecision]:
+        """Execute a decision and report what was actually done.
+
+        Returns the stored or protected record (None when nothing changed) and
+        the decision that was carried out, which differs from the one passed in
+        whenever the matched record changed in the meantime.
+
+        The decision was made on an earlier read, and other agents may have
+        forgotten, corrected or pinned the matched record since. Each step
+        below therefore acts on the record as it is now, inside the store's
+        write transaction, and never writes back the earlier copy:
+
+        * a matched record that is no longer active is not a duplicate any
+          more, so the candidate is stored as a new memory;
+        * an automatic delete or merge that finds its target changed is
+          dropped and the candidate is stored beside it for explicit review;
+        * tightening privacy also reaches a forgotten or replaced record, and
+          never restores it.
+        """
         from hunter_gatherer.memory.evidence import is_sensitive_memory
 
-        target = self.store.get(decision.target_id) if decision.target_id else None
         tightened = False
-        if (target is not None and not target.metadata.get("sensitive")
-                and is_sensitive_memory(candidate, self.store)):
-            # Re-importing an existing fact as private must protect the original
-            # too, even when dedup would otherwise discard the new labels.
-            target.metadata = {**target.metadata, "sensitive": True}
-            self.store.update(target)
-            tightened = True
+        target = None
+        if decision.target_id:
+            sensitive = is_sensitive_memory(candidate, self.store)
+            # Compare before applying our own privacy change, and keep that
+            # change atomic with the comparison. A later edit is checked again
+            # in the update or delete transaction below.
+            with self.store.write_transaction() if sensitive else contextlib.nullcontext():
+                target = self.store.get(decision.target_id)
+                if (target is not None and decision.op != "ADD"
+                        and target._stored_token != decision.target_token):
+                    decision = ConsolidationDecision(
+                        op="ADD", target_id=target.id,
+                        reason="existing fact changed during reconciliation; kept for explicit review")
+                if target is not None and sensitive:
+                    tightened = self._tighten_sensitivity(target.id)
+                    if tightened:
+                        target = self.store.get(target.id)
+        if decision.target_id and (target is None or not target.is_retrievable()):
+            decision = ConsolidationDecision(op="ADD", target_id=decision.target_id,
+                                             reason="matched record is no longer active")
+            target = None
         if candidate.is_permanent or (target is not None and target.is_permanent):
             decision = ConsolidationDecision(op="ADD", target_id=decision.target_id,
                                              reason="permanent retention prevents automatic reconciliation")
         if decision.op == "NOOP":
             if tightened:
-                decision.reason = "existing fact retained; sensitivity tightened"
+                decision = ConsolidationDecision(op="NOOP", target_id=decision.target_id,
+                                                 reason="existing fact retained; sensitivity tightened")
             self._audit(candidate, decision)
             log.debug("consolidate NOOP: %s", candidate.text[:60])
-            return target if tightened else None
+            return (target if tightened else None), decision
 
-        if decision.op == "DELETE" and decision.target_id:
-            old = self.store.get(decision.target_id)
-            self.store.delete(decision.target_id)
-            self._invalidate_cache(decision.target_id)  # 2026-09-01 #1
-            if old:
-                self._audit(candidate, decision, old=old.text)
+        if decision.op == "DELETE" and target is not None:
+            try:
+                # Forget exactly the record that was judged, unless it was
+                # pinned, corrected or edited after the judgment.
+                forgotten = self.store.delete(target.id, expected=target,
+                                              guard=lambda current: not current.is_permanent)
+                if not forgotten:
+                    raise MemoryConflictError(target.id, "deleted")
+            except MemoryConflictError:
+                decision = ConsolidationDecision(
+                    op="ADD", target_id=target.id,
+                    reason="existing fact changed during reconciliation; kept for explicit review")
+            else:
+                self._invalidate_cache(target.id)  # 2026-09-01 #1
+                self._audit(candidate, decision, old=target.text)
 
-        if decision.op == "UPDATE" and decision.target_id:
-            old = self.store.get(decision.target_id)
-            merged = self._merge(old, candidate) if old else candidate
-            self.store.update(merged)
-            self._invalidate_cache(decision.target_id)  # 2026-09-01 #1
-            if old:
-                self._audit(candidate, decision, old=old.text)
-            return merged
+        if decision.op == "UPDATE" and target is not None:
+            old_text = target.text
 
-        # ADD (or DELETE-then-ADD for contradictions).
-        self.store.add(candidate)
+            def merge(current: Memory) -> Memory | None:
+                if current.is_permanent or current._stored_token != target._stored_token:
+                    raise MemoryConflictError(current.id, "changed")
+                return self._merge(current, candidate)
+
+            try:
+                merged = self.store.mutate(target.id, merge)
+            except MemoryConflictError:
+                decision = ConsolidationDecision(
+                    op="ADD", target_id=target.id,
+                    reason="existing fact changed during reconciliation; kept for explicit review")
+            else:
+                self._invalidate_cache(target.id)  # 2026-09-01 #1
+                self._audit(candidate, decision, old=old_text)
+                return merged, decision
+
+        # ADD (or DELETE-then-ADD for contradictions). Saving the same fact
+        # twice — a retry, or two agents at once — yields one record.
+        stored, created = self.store.add_unless_present(
+            candidate, lambda existing: self._same_memory(existing, candidate))
+        if not created:
+            protected = self._protect_like(stored.id, candidate)
+            decision = ConsolidationDecision(
+                op="NOOP", target_id=stored.id,
+                reason=("identical memory already stored; protections tightened"
+                        if protected else "identical memory already stored"))
+            self._audit(candidate, decision)
+            return (self.store.get(stored.id) if protected else None), decision
         self._audit(candidate, decision)
-        return candidate
+        return candidate, decision
+
+    @staticmethod
+    def _same_memory(existing: Memory, candidate: Memory) -> bool:
+        """Identical text is the same memory only within one scope, and only
+        when keeping the existing record loses none of the candidate's sources."""
+        for key in ("workspace_id", "scope"):
+            if existing.metadata.get(key) != candidate.metadata.get(key):
+                return False
+
+        def refs(memory: Memory) -> set[str]:
+            values = memory.metadata.get("evidence_refs") or []
+            if not isinstance(values, list):
+                return {"<unreadable>"}
+            return {f"{ref.get('document_id')}#{ref.get('chunk_id')}#{ref.get('quote')}"
+                    if isinstance(ref, dict) else "<unreadable>" for ref in values}
+
+        return refs(candidate) <= refs(existing)
+
+    def _tighten_sensitivity(self, memory_id: str) -> bool:
+        """Mark a record sensitive whatever its state; never revive it."""
+        def mark(current: Memory) -> Memory | None:
+            if current.metadata.get("sensitive"):
+                return None
+            current.metadata = {**current.metadata, "sensitive": True}
+            return current
+
+        with contextlib.suppress(MemoryConflictError):  # erased meanwhile: nothing to protect
+            return self.store.mutate(memory_id, mark, require_active=False) is not None
+        return False
+
+    def _protect_like(self, memory_id: str, candidate: Memory) -> bool:
+        """Carry a duplicate's stricter privacy and retention onto the record kept."""
+        from hunter_gatherer.memory.evidence import is_sensitive_memory
+
+        sensitive = is_sensitive_memory(candidate, self.store)
+        wanted = {key: candidate.metadata[key] for key in ("excluded", "application_excluded", "core")
+                  if candidate.metadata.get(key)}
+        if sensitive:
+            wanted["sensitive"] = True
+        if candidate.is_permanent:
+            wanted["retention"] = "permanent"
+
+        def protect(current: Memory) -> Memory | None:
+            missing = {key: value for key, value in wanted.items() if current.metadata.get(key) != value}
+            if not missing:
+                return None
+            current.metadata = {**current.metadata, **missing}
+            return current
+
+        if wanted:
+            with contextlib.suppress(MemoryConflictError):
+                return self.store.mutate(memory_id, protect, require_active=False) is not None
+        return False
 
     def store_with_consolidation(self, candidate: Memory) -> Memory | None:
         """Convenience: decide + apply in one call. Returns stored memory or None.
@@ -132,7 +248,7 @@ class Consolidator:
         stored memory's outgoing links — marginal cost is one INSERT."""
         hits = self.store.vector_search(candidate.text, top_k=3)
         decision = self._decide_from_hits(candidate, hits)
-        stored = self.apply(candidate, decision)
+        stored, decision = self.resolve(candidate, decision)
         if stored is not None:
             self._persist_links(stored, hits)
             self._note_memory_event(stored.text, decision.op.lower())  # 2026-09-09 #3
@@ -212,18 +328,20 @@ class Consolidator:
     def _audit(self, candidate: Memory, decision: ConsolidationDecision, old: str | None = None) -> None:
         """Record the decision in a lightweight audit table."""
         try:
-            self.store._sqlite.execute(  # noqa: SLF001
-                """
-                CREATE TABLE IF NOT EXISTS consolidation_audit (
-                    ts REAL, op TEXT, target_id TEXT, candidate TEXT, old TEXT, reason TEXT
+            # Under the store lock: an unlocked commit on the shared connection
+            # could commit part of another thread's transaction.
+            with self.store.write_transaction():
+                self.store._sqlite.execute(  # noqa: SLF001
+                    """
+                    CREATE TABLE IF NOT EXISTS consolidation_audit (
+                        ts REAL, op TEXT, target_id TEXT, candidate TEXT, old TEXT, reason TEXT
+                    )
+                    """
                 )
-                """
-            )
-            self.store._sqlite.execute(  # noqa: SLF001
-                "INSERT INTO consolidation_audit VALUES (?, ?, ?, ?, ?, ?)",
-                (time.time(), decision.op, decision.target_id, candidate.text, old, decision.reason),
-            )
-            self.store._sqlite.commit()
+                self.store._sqlite.execute(  # noqa: SLF001
+                    "INSERT INTO consolidation_audit VALUES (?, ?, ?, ?, ?, ?)",
+                    (time.time(), decision.op, decision.target_id, candidate.text, old, decision.reason),
+                )
         except Exception as e:  # pragma: no cover
             log.debug("audit write failed: %s", e)
 

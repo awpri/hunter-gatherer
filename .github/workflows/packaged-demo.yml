@@ -49,20 +49,35 @@ jobs:
       - name: Install wheel into fresh environment and exercise outside checkout
         shell: bash
         run: |
-          python -m venv "$RUNNER_TEMP/hunter_gatherer-install"
+          # The macOS setup-python build disables loadable SQLite extensions.
+          # Exercise sqlite-vec on an extension-capable build in its matrix lane.
+          if [ "$RUNNER_OS" = "macOS" ] && [ "${{ matrix.python }}" = "3.13" ]; then
+            python -m pip install uv
+            python -m uv python install --no-bin --install-dir "$RUNNER_TEMP/hg-python" 3.13
+            interpreters=("$RUNNER_TEMP"/hg-python/cpython-3.13.*-macos-*-none/bin/python3.13)
+            "${interpreters[0]}" -m venv "$RUNNER_TEMP/hunter_gatherer-install"
+          else
+            python -m venv "$RUNNER_TEMP/hunter_gatherer-install"
+          fi
           if [ "$RUNNER_OS" = "Windows" ]; then
             smoke_python="$RUNNER_TEMP/hunter_gatherer-install/Scripts/python.exe"
           else
             smoke_python="$RUNNER_TEMP/hunter_gatherer-install/bin/python"
           fi
-          wheels=(dist/*.whl)
-          "$smoke_python" -m pip install "${wheels[0]}[dev,document-view]"
+          cp dist/*.whl "$RUNNER_TEMP/"
           cp scripts/smoke_packaged_demo.py "$RUNNER_TEMP/smoke_packaged_demo.py"
           cp scripts/smoke_personal_library.py "$RUNNER_TEMP/smoke_personal_library.py"
           cd "$RUNNER_TEMP"
+          wheels=(./hunter_gatherer-*.whl)
+          "$smoke_python" -m pip install "${wheels[0]}"
           export PAGE_IMAGE_TEST_PYTHON="$smoke_python"
-          "$smoke_python" -I -B smoke_packaged_demo.py --require-lean --output packaged-demo.json
           "$smoke_python" -I -B smoke_personal_library.py --output personal-library.json
+          "$smoke_python" -m pip install "${wheels[0]}[dev,document-view]"
+          "$smoke_python" -I -B smoke_packaged_demo.py --require-lean --output packaged-demo.json
+          if [ "${{ matrix.python }}" = "3.13" ]; then
+            "$smoke_python" -m pip install "${wheels[0]}[local]"
+            "$smoke_python" -I -c 'import sqlite3, sqlite_vec; db = sqlite3.connect(":memory:"); db.enable_load_extension(True); sqlite_vec.load(db); print(db.execute("SELECT vec_version()").fetchone()[0]); db.close()'
+          fi
           "$smoke_python" -m pytest -q --tb=short -p no:cacheprovider --junitxml="$RUNNER_TEMP/packaged-tests.xml" "$RUNNER_TEMP/public-candidate/tests"
           "$smoke_python" -m pip freeze > resolved-dependencies.txt
       - uses: actions/upload-artifact@v4

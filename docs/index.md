@@ -10,6 +10,8 @@ you want to use.
 | [Use the terminal](cli.md) | Ask a question, open a citation or return structured evidence to a script. |
 | [Use the library](usage.md) | Search, explore the graph, inspect quotations and save a collection. |
 | [Connect an assistant](mcp.md) | Give an MCP client access to the library. |
+| [Several assistants, one library](concurrency.md) | Know what happens when clients write at the same time, and how to set the library up for it. |
+| [Host it for more than one person](hosting.md) | Put your own sign-in and membership in front, and limit what each caller may do. |
 | [Questions and feature scope](faq.md) | Understand search results, privacy, writing examples and optional AI components. |
 | [Roadmap](roadmap.md) | See the proposed direction for optional assistant features and a lighter core. |
 | [Explore the demo](demo.md) | Work through current versus historical sources and missing information. |

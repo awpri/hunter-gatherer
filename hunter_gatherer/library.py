@@ -96,8 +96,8 @@ def _database_metadata(database: Path) -> dict[str, str]:
         raise ValueError("Not an initialized h/g library database") from exc
 
 
-def library_settings(directory: str | Path) -> Settings:
-    """Validate an existing directory without initializing a model or store."""
+def _library_manifest(directory: str | Path) -> tuple[Path, dict]:
+    """The checked directory and manifest of an existing library. Opens no database."""
     target = _safe_path(directory)
     path = _safe_path(target / MANIFEST)
     try:
@@ -115,6 +115,12 @@ def library_settings(directory: str | Path) -> Settings:
             raise ValueError("Invalid h/g library manifest")
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         raise ValueError("Not an initialized h/g library directory; create one with hunt init DIR") from exc
+    return target, manifest
+
+
+def library_settings(directory: str | Path) -> Settings:
+    """Validate an existing directory without initializing a model or store."""
+    target, manifest = _library_manifest(directory)
     database = _safe_path(target / "library.db")
     for suffix in ("-wal", "-shm", "-journal"):
         _safe_path(Path(str(database) + suffix))
@@ -238,12 +244,15 @@ class LibraryRuntime:
         self.store.close()
 
 
-def build_library_harness(settings: Settings):
+def build_library_harness(settings: Settings, *, access_policy=None):
     """Create one warm library store without loading agent skills or clients.
 
     The six library tools operate on attributed records and exact sources. They
     do not need the inherited agent router, shell/file tools, sessions or skills.
     Explicit full-profile/agent launchers retain their separate Harness.build.
+
+    ``access_policy`` is for a host that serves this library to callers it has
+    authenticated: an ``AccessPolicy`` no call through this harness can exceed.
     """
     from hunter_gatherer.cost import CostTracker
     from hunter_gatherer.mcp.tools import Harness
@@ -257,13 +266,51 @@ def build_library_harness(settings: Settings):
         embedder.embed("Initialize local semantic search")
     store = MemoryStore(settings, embedder=embedder)
     return Harness(loop=LibraryRuntime(store=store, embedder=embedder), store=store,
-                   cost=CostTracker(settings=settings), settings=settings)
+                   cost=CostTracker(settings=settings), settings=settings,
+                   access_policy=access_policy)
+
+
+def storage_report(directory: str | Path) -> dict:
+    """Where this library's database lives and how processes share it. Read-only.
+
+    h/g chooses the journal mode by itself each time the library is opened
+    (see ``hunter_gatherer.storage``). This reports the mode the file is in,
+    the reason, and a warning when the folder is a risky home for a live
+    library. The database is not opened, so nothing is left beside it.
+    """
+    from hunter_gatherer import storage
+
+    target, _manifest_checked = _library_manifest(directory)
+    database = _safe_path(target / "library.db")
+    if not database.is_file():
+        raise ValueError("Not an initialized h/g library database")
+    report = storage.report(storage.classify(target), storage.file_journal_mode(database))
+    report["sidecar_files"] = sorted(name for suffix in ("-wal", "-shm", "-journal")
+                                     if (database.parent / (name := database.name + suffix)).exists())
+    return report
+
+
+def cmd_library_storage(args, _settings=None):
+    report = storage_report(args.directory)
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"Journal mode: {report['journal_mode']} (chosen {report['chosen']})")
+        print(report["explanation"])
+        if report["warning"]:
+            print(f"Warning: {report['warning']}")
 
 
 def cmd_library_init(args, _settings=None):
     with contextlib.redirect_stdout(sys.stderr):
         manifest = create_library(args.directory, semantic=args.semantic,
                                   download_model=args.download_model, from_backup=args.from_backup)
+    from hunter_gatherer import storage
+
+    warning = storage.location_warning(_safe_path(args.directory))
+    if warning:
+        # Not part of the manifest, so it goes to stderr in both output forms.
+        print(f"Warning: {warning}", file=sys.stderr)
     if args.json:
         print(json.dumps(manifest, indent=2))
     else:

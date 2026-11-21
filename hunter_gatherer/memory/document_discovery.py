@@ -53,7 +53,7 @@ def _label_projection(field, limit):
 
 
 def _catalog_rows(store, *, include_sensitive, ordered=False, without_passages=False,
-                  row_ids=None, all_records=False):
+                  row_ids=None, all_records=False, document_ids=None):
     projections = [_label_projection(field, limit) for field, limit in _LIMITS.items()
                    if field != "source_filename"]
     # rtrim removes the set of non-separator characters from the end, leaving
@@ -69,10 +69,13 @@ def _catalog_rows(store, *, include_sensitive, ordered=False, without_passages=F
                     "EXISTS (SELECT 1 FROM archive_chunks c WHERE c.document_id=d.id) AS has_stored_chunks"]
     clause = "1" if all_records else visible_document_clause(include_sensitive)
     parameters = []
+    import json
     if row_ids is not None:
         clause += " AND d.rowid IN (SELECT value FROM json_each(?))"
-        import json
         parameters.append(json.dumps(row_ids))
+    if document_ids is not None:
+        clause += " AND d.id IN (SELECT value FROM json_each(?))"
+        parameters.append(json.dumps(document_ids))
     if without_passages:
         clause += " AND NOT EXISTS (SELECT 1 FROM archive_chunks c WHERE c.document_id=d.id)"
     sql = "SELECT " + ",".join(projections) + " FROM archive_documents d WHERE " + clause
@@ -156,7 +159,7 @@ def _discovery_paging(offset, limit, total, returned):
             "has_more": has_more, "total": total}
 
 
-def discover_documents(store, *, queries, limit=8, include_sensitive=False, offset=None):
+def discover_documents(store, *, queries, limit=8, include_sensitive=False, offset=None, ranked_limit=0):
     """Return up to eight metadata leads from one streaming, visible catalog scan.
 
     Rank by largest distinct-token intersection for one query, then union of
@@ -164,6 +167,9 @@ def discover_documents(store, *, queries, limit=8, include_sensitive=False, offs
     scan work is linear in eligible documents, not capped to recent imports.
     An optional offset pages the same stable ranking beyond the initial eight;
     skipped candidates retain numeric ranking identities rather than payloads.
+    With an offset, ``ranked_limit`` also lists the exact original citations of
+    the first that many leads in ranked order (``ranked_citations``, IDs only)
+    and whether the ranking ended within them (``ranked_complete``).
     """
     queries = _validate_queries(queries)
     if type(limit) is not int or not 1 <= limit <= 8:
@@ -171,19 +177,24 @@ def discover_documents(store, *, queries, limit=8, include_sensitive=False, offs
     _validate_sensitive(include_sensitive)
     if offset is not None and (type(offset) is not int or offset < 0):
         raise ValueError("offset must be a nonnegative integer")
+    if type(ranked_limit) is not int or not 0 <= ranked_limit <= 1024 or (ranked_limit and offset is None):
+        raise ValueError("ranked_limit must be an integer from 0 to 1024 and requires an offset")
     result = {"executed": True, "queries": queries, "method": _METHOD, "scope": "latest_visible_documents",
               "content_policy": _POLICY, "limit": limit, "candidates": [], "scanned_documents": 0,
               "matching_documents": 0, "omitted_documents": 0, "invalid_identity_documents": 0,
               "documents_with_omitted_metadata": 0, "matching_scope": "bounded_catalog_labels"}
     if offset is not None:
         result.update(_discovery_paging(offset, limit, 0, 0))
+    if ranked_limit:
+        result.update(ranked_citations=[], ranked_complete=True)
     token_queries = [_tokens(query) for query in queries]
     if not any(token_queries):
         result.update(executed=False, reason="no_searchable_metadata_terms")
         return result
     if getattr(store.settings, "archive_catalog_index", False):
         from hunter_gatherer.memory.catalog_index import indexed_discovery
-        indexed = indexed_discovery(store, token_queries, limit, include_sensitive, offset=offset)
+        indexed = indexed_discovery(store, token_queries, limit, include_sensitive, offset=offset,
+                                    ranked_limit=ranked_limit)
         if indexed is not None:
             return {**result, **indexed}
     heap = []
@@ -205,8 +216,8 @@ def discover_documents(store, *, queries, limit=8, include_sensitive=False, offs
             result["matching_documents"] += 1
             # Reverse lexical ID for heap eviction; final output orders it forward.
             key = (*rank, tuple(-ord(char) for char in candidate["document_id"]))
-            item = (key, candidate if offset is None else row["catalog_rowid"])
-            retained_limit = limit if offset is None else offset + limit
+            item = (key, candidate if offset is None else (row["catalog_rowid"], candidate["original_citation"]))
+            retained_limit = limit if offset is None else max(offset + limit, ranked_limit)
             if len(heap) < retained_limit:
                 heapq.heappush(heap, item)
             elif key > heap[0][0]:
@@ -214,19 +225,67 @@ def discover_documents(store, *, queries, limit=8, include_sensitive=False, offs
         if offset is not None:
             # Retain only numeric ranking keys and row identities for skipped
             # pages, never label payloads or text. Hydrate the bounded page.
-            page = sorted(heap, key=lambda item: item[0], reverse=True)[offset:offset + limit]
+            ordered = sorted(heap, key=lambda item: item[0], reverse=True)
+            page = ordered[offset:offset + limit]
             rows = {row["catalog_rowid"]: row for row in _catalog_rows(
-                store, include_sensitive=include_sensitive, row_ids=[item[1] for item in page])} if page else {}
-            for _, rowid in page:
+                store, include_sensitive=include_sensitive, row_ids=[item[1][0] for item in page])} if page else {}
+            for _, (rowid, _citation) in page:
                 candidate = _candidate(rows[rowid], include_sensitive=include_sensitive)
                 _match(candidate, token_queries)
                 result["candidates"].append(candidate)
+            if ranked_limit:
+                result["ranked_citations"] = [item[1][1] for item in ordered[:ranked_limit]]
+                result["ranked_complete"] = result["matching_documents"] <= ranked_limit
     if offset is None:
         result["candidates"] = [item[1] for item in sorted(heap, key=lambda item: item[0], reverse=True)]
     else:
         result.update(_discovery_paging(offset, limit, result["matching_documents"], len(result["candidates"])))
     result["omitted_documents"] = result["matching_documents"] - len(result["candidates"])
     return result
+
+
+def admitted_documents(store, *, queries, citations, limit=8, include_sensitive=False):
+    """Hydrate the next catalog leads an earlier search admitted, in that order.
+
+    ``citations`` are exact original-file citations. Each is checked against
+    the current catalog: a document since forgotten, made sensitive or replaced
+    by a newer version is withdrawn, never returned. Returns the discovery
+    result and the withdrawn citations; no ranking is repeated.
+    """
+    queries = _validate_queries(queries)
+    if type(limit) is not int or not 1 <= limit <= 8:
+        raise ValueError("limit must be an integer from 1 to 8")
+    _validate_sensitive(include_sensitive)
+    from hunter_gatherer.memory.original_file_reference import parse_original_file_citation
+
+    result = {"executed": True, "queries": queries, "method": _METHOD, "scope": "latest_visible_documents",
+              "content_policy": _POLICY, "limit": limit, "candidates": [],
+              "matching_scope": "catalog_leads_admitted_by_first_page"}
+    token_queries = [_tokens(query) for query in queries]
+    references = {citation: parse_original_file_citation(citation) for citation in citations}
+    withdrawn = []
+    with store._lock:
+        if not _schema_available(store):
+            result.update(executed=False, reason="archive_unavailable")
+            return result, list(citations)
+        rows = {row["id"]: row for row in _catalog_rows(
+            store, include_sensitive=include_sensitive,
+            document_ids=sorted({ref["document_id"] for ref in references.values() if ref}))}
+        for citation in citations:
+            if len(result["candidates"]) == limit:
+                break
+            ref, row = references[citation], None
+            if ref is not None:
+                row = rows.get(ref["document_id"])
+            candidate = _candidate(row, include_sensitive=include_sensitive) if row is not None else None
+            if candidate is None or candidate["original_citation"] != citation:
+                withdrawn.append(citation)
+                continue
+            if _match(candidate, token_queries) is None:
+                candidate.update(matched_queries=[], matched_fields=[])
+            result["candidates"].append(candidate)
+    result["omitted_documents"] = len(citations) - len(withdrawn) - len(result["candidates"])
+    return result, withdrawn
 
 
 def browse_document_catalog(store, *, query="", without_passages=False, limit=20, offset=0,
